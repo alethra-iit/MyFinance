@@ -139,11 +139,11 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
                     trailing = {
                         Switch(
                             checked = lock.biometric, enabled = bioStatus == BiometricManager.BIOMETRIC_SUCCESS || lock.biometric,
-                            onCheckedChange = { lock.setBiometric(it) }
+                            onCheckedChange = { lock.changeBiometric(it) }
                         )
                     }
                 ) {
-                    if (bioStatus == BiometricManager.BIOMETRIC_SUCCESS) lock.setBiometric(!lock.biometric)
+                    if (bioStatus == BiometricManager.BIOMETRIC_SUCCESS) lock.changeBiometric(!lock.biometric)
                     else toast("Daftarkan sidik jari di Pengaturan perangkat terlebih dahulu")
                 }
                 SettingRow(Icons.Rounded.Timer, "Kunci otomatis", lockTimeoutLabel(lock.timeoutSec)) { dialog = "locktimeout" }
@@ -262,7 +262,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
         PinFlowDialog(m, lock, onDismiss = { pinMode = null }) { msg ->
             pinMode = null; toast(msg)
             // Setelah kunci pertama kali aktif, tawarkan sidik jari otomatis bila tersedia
-            if (m == PinMode.SET && AppLock.biometricAvailable(ctx)) lock.setBiometric(true)
+            if (m == PinMode.SET && AppLock.biometricAvailable(ctx)) lock.changeBiometric(true)
         }
     }
 

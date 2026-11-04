@@ -91,7 +91,7 @@ class AppLock(context: Context) {
 
     // ---------- Pengaturan ----------
 
-    fun setBiometric(on: Boolean) {
+    fun changeBiometric(on: Boolean) {
         biometric = on && enabled
         prefs.edit().putBoolean(K_BIO, biometric).apply()
     }
