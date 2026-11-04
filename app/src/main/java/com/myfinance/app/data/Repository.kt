@@ -199,6 +199,17 @@ class Repository(private val db: AppDatabase) {
         shop.getList(id)?.let { shop.updateList(it.copy(title = title)) }
     }
     suspend fun deleteList(id: Long) = shop.deleteList(id)
+
+    /**
+     * Menyalin daftar beserta barangnya untuk belanja berulang. Salinan mulai bersih: belum dicentang dan belum
+     * dicatat sebagai pengeluaran. Dalam satu transaksi database. Mengembalikan id daftar baru (atau null bila asal hilang).
+     */
+    suspend fun duplicateList(id: Long): Long? = db.withTransaction {
+        val src = shop.getList(id) ?: return@withTransaction null
+        val newId = shop.insertList(ShoppingListEntity(title = "${src.title} (salinan)".take(60)))
+        shop.insertItems(shop.getItems(id).map { it.copy(id = 0, listId = newId, checked = false, converted = false) })
+        newId
+    }
     suspend fun saveItem(i: ShoppingItemEntity) {
         if (i.id == 0L) shop.insertItem(i) else shop.updateItem(i)
     }

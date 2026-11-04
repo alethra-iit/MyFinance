@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
-import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +56,7 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity, lock: AppLock) {
     val tabs = listOf(
         Tab("home", "Beranda", Icons.Rounded.Home),
         Tab("history", "Riwayat", Icons.AutoMirrored.Rounded.List),
-        Tab("shopping", "Catatan", Icons.Rounded.Description),
+        Tab("shopping", "Belanja", Icons.Rounded.ShoppingCart),
         Tab("profile", "Profil", Icons.Rounded.Person)
     )
 

@@ -157,7 +157,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 QuickAction(Icons.Rounded.ArrowUpward, "Tambah Pemasukan", green, { nav.navigate("add/$TYPE_INCOME") }, Modifier.weight(1f))
                 QuickAction(Icons.Rounded.ArrowDownward, "Tambah Pengeluaran", red, { nav.navigate("add/$TYPE_EXPENSE") }, Modifier.weight(1f))
-                QuickAction(Icons.Rounded.Description, "Catatan Belanja", Purple, { nav.goTab("shopping") }, Modifier.weight(1f))
+                QuickAction(Icons.Rounded.ShoppingCart, "Belanja", Purple, { nav.goTab("shopping") }, Modifier.weight(1f))
                 QuickAction(Icons.Rounded.BarChart, "Lihat Laporan", Color(0xFF3B82F6), { nav.navigate("report") }, Modifier.weight(1f))
             }
         }

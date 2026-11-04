@@ -174,7 +174,19 @@ class ShoppingViewModel(app: Application) : AndroidViewModel(app) {
     fun saveItem(i: ShoppingItemEntity) { viewModelScope.launch { repo.saveItem(i) } }
     fun deleteItem(id: Long) { viewModelScope.launch { repo.deleteItem(id) } }
     fun setChecked(id: Long, checked: Boolean) { viewModelScope.launch { repo.setChecked(id, checked) } }
-    fun convert(listId: Long, category: String, date: Long, onResult: (ConvertResult) -> Unit) {
-        viewModelScope.launch { onResult(repo.convert(listId, category, date)) }
+    fun duplicateList(id: Long, onCreated: (Long) -> Unit) {
+        viewModelScope.launch { repo.duplicateList(id)?.let(onCreated) }
+    }
+
+    /** Selain hasil konversi, mengembalikan peringatan anggaran yang baru tercapai (sama seperti mencatat transaksi biasa). */
+    fun convert(listId: Long, category: String, date: Long, onResult: (ConvertResult, List<String>) -> Unit) {
+        viewModelScope.launch {
+            val r = repo.convert(listId, category, date)
+            val alerts = if (r == ConvertResult.OK) {
+                runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }
+                    .getOrDefault(emptyList()).map { it.message }
+            } else emptyList()
+            onResult(r, alerts)
+        }
     }
 }
