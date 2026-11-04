@@ -12,12 +12,25 @@ android {
         applicationId = "com.myfinance.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        // versionCode naik otomatis di GitHub Actions supaya APK baru bisa menimpa (update) yang lama
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "1.0.$run"
+    }
+
+    // Kunci tanda tangan TETAP: wajib sama di setiap build agar bisa update tanpa uninstall & data tetap aman
+    signingConfigs {
+        create("myfinance") {
+            storeFile = file("myfinance.jks")
+            storePassword = "myfinance123"
+            keyAlias = "myfinance"
+            keyPassword = "myfinance123"
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("myfinance")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

@@ -3,7 +3,6 @@ name: Build APK MyFinance
 on:
   push:
     branches: [ main, master ]
-    tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
 
@@ -31,20 +30,23 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build APK debug
-        run: gradle assembleDebug --stacktrace
+      - name: Build APK (signed)
+        run: gradle assembleRelease --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk MyFinance-debug.apk
+        run: cp app/build/outputs/apk/release/app-release.apk MyFinance.apk
 
-      - name: Upload APK
+      - name: Upload APK (Artifacts)
         uses: actions/upload-artifact@v4
         with:
           name: MyFinance-APK
-          path: MyFinance-debug.apk
+          path: MyFinance.apk
 
-      - name: Publish ke GitHub Release (hanya untuk tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish ke GitHub Release (otomatis tiap push ke main)
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: softprops/action-gh-release@v2
         with:
-          files: MyFinance-debug.apk
+          tag_name: v1.0.${{ github.run_number }}
+          name: MyFinance v1.0.${{ github.run_number }}
+          make_latest: true
+          files: MyFinance.apk
