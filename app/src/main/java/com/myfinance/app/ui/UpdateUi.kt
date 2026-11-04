@@ -48,7 +48,7 @@ class UpdateController(context: Context, private val scope: CoroutineScope) {
 
     private fun toast(m: String) = Toast.makeText(ctx, m, Toast.LENGTH_LONG).show()
 
-    fun setAuto(v: Boolean) { auto = v; prefs.edit().putBoolean("auto", v).apply() }
+    fun updateAutoCheck(v: Boolean) { auto = v; prefs.edit().putBoolean("auto", v).apply() }
 
     fun metered(): Boolean = runCatching { ctx.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered }.getOrDefault(false)
 

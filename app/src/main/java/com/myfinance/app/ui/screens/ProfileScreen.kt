@@ -198,7 +198,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Periksa otomatis setiap hari", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            Switch(checked = upd.auto, onCheckedChange = { upd.setAuto(it) })
+                            Switch(checked = upd.auto, onCheckedChange = { upd.updateAutoCheck(it) })
                         }
                     }
                 }
