@@ -8,7 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -98,15 +101,28 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
             ) {
                 typeCats.forEach { c ->
                     val sel = c.name == category
+                    val cc = categoryColor(c.name)
                     Column(
-                        Modifier.width(76.dp).clip(RoundedCornerShape(16.dp)).clickable { category = c.name }.padding(vertical = 4.dp),
+                        Modifier.width(76.dp).clip(RoundedCornerShape(16.dp))
+                            .background(if (sel) cc.copy(alpha = .14f) else Color.Transparent)
+                            .clickable { category = c.name }.padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(
-                            Modifier.size(56.dp).clip(CircleShape)
-                                .background(if (sel) categoryColor(c.name).copy(alpha = .30f) else categoryColor(c.name).copy(alpha = .12f)),
-                            contentAlignment = Alignment.Center
-                        ) { Icon(categoryIcon(c.name), null, tint = categoryColor(c.name)) }
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            Box(
+                                Modifier.padding(3.dp).size(54.dp).clip(CircleShape)
+                                    .background(if (sel) cc else cc.copy(alpha = .12f))
+                                    .then(if (sel) Modifier.border(3.dp, cc.copy(alpha = .45f), CircleShape) else Modifier),
+                                contentAlignment = Alignment.Center
+                            ) { Icon(categoryIcon(c.name), null, tint = if (sel) Color.White else cc) }
+                            if (sel) {
+                                Box(
+                                    Modifier.size(20.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
+                                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) { Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
+                            }
+                        }
                         Spacer(Modifier.height(4.dp))
                         Text(
                             c.name, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center, maxLines = 1,

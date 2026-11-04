@@ -16,6 +16,10 @@ android {
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = run
         versionName = "1.0.$run"
+        // Repositori GitHub tempat pembaruan dicek (lihat Updater.kt). Di GitHub Actions terisi otomatis dari GITHUB_REPOSITORY
+        // ("pemilik/repo"); untuk build lokal isi updateRepo=pemilik/repo di gradle.properties.
+        val upd = System.getenv("GITHUB_REPOSITORY") ?: (project.findProperty("updateRepo") as String?) ?: ""
+        buildConfigField("String", "UPDATE_REPO", "\"" + upd.trim() + "\"")
     }
 
     // Kunci tanda tangan TETAP: wajib sama di setiap build agar bisa update tanpa uninstall & data tetap aman
@@ -40,7 +44,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }

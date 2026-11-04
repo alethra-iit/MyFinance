@@ -37,10 +37,11 @@ import kotlinx.coroutines.withContext
 private const val XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @Composable
-fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity) {
+fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateController) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<String?>(null) }
+    var reminderLabel by remember { mutableStateOf(Reminder.label(ctx)) }
     var pendingRestore by remember { mutableStateOf<Uri?>(null) }
     var exportFormat by remember { mutableStateOf("XLSX") }
     var exportRange by remember { mutableStateOf("MONTH") }
@@ -72,7 +73,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity) {
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             vm.updateSettings { it.copy(notifications = true) }; Reminder.schedule(ctx)
-            toast("Pengingat harian aktif (pukul 20.00)")
+            toast("Pengingat harian aktif (pukul ${Reminder.label(ctx)})")
         } else toast("Izin notifikasi ditolak")
     }
 
@@ -100,7 +101,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity) {
         SoftCard(Modifier.fillMaxWidth()) {
             SettingRow(Icons.Rounded.Palette, "Tema", themeLabel(settings.theme)) { dialog = "theme" }
             SettingRow(Icons.Rounded.AttachMoney, "Mata Uang", currencyLabel(settings.currency)) { dialog = "currency" }
-            SettingRow(Icons.Rounded.Notifications, "Notifikasi", "Pengingat harian 20.00", trailing = {
+            SettingRow(Icons.Rounded.Notifications, "Notifikasi", "Pengingat harian $reminderLabel · ketuk untuk ubah jam", trailing = {
                 Switch(checked = settings.notifications, onCheckedChange = { on ->
                     if (!on) {
                         vm.updateSettings { it.copy(notifications = false) }; Reminder.cancel(ctx)
@@ -108,10 +109,12 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity) {
                         notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
                         vm.updateSettings { it.copy(notifications = true) }; Reminder.schedule(ctx)
-                        toast("Pengingat harian aktif (pukul 20.00)")
+                        toast("Pengingat harian aktif (pukul ${Reminder.label(ctx)})")
                     }
                 })
-            }) {}
+            }) {
+                Reminder.pickTime(ctx, settings.notifications) { reminderLabel = Reminder.label(ctx) }
+            }
         }
 
         SoftCard(Modifier.fillMaxWidth()) {
@@ -122,7 +125,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity) {
                 restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
             }
             SettingRow(Icons.Rounded.FileDownload, "Ekspor Laporan", "Excel (.xlsx) atau PDF") { dialog = "export" }
-            SettingRow(Icons.Rounded.Info, "Tentang Aplikasi", "MyFinance 1.0.0") { dialog = "about" }
+            SettingRow(Icons.Rounded.Info, "Tentang Aplikasi", "MyFinance ${upd.versionName} · cek pembaruan") { dialog = "about" }
         }
 
         Button(
@@ -174,7 +177,32 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity) {
         "about" -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("MyFinance") },
-            text = { Text("Versi 1.0.0\n\nAplikasi pencatat keuangan pribadi. Seluruh data tersimpan di perangkat Anda dan dapat digunakan tanpa internet.") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Versi ${upd.versionName} (build ${upd.build})", fontWeight = FontWeight.SemiBold)
+                    Text("Aplikasi pencatat keuangan pribadi. Seluruh data tersimpan di perangkat Anda dan dapat digunakan tanpa internet.")
+                    HorizontalDivider()
+                    if (!upd.enabled) {
+                        Text("Pembaruan otomatis tidak tersedia di build ini.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Button(
+                            onClick = { upd.check(true) }, enabled = !upd.checking && !upd.downloading,
+                            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)
+                        ) {
+                            if (upd.checking) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                Spacer(Modifier.width(8.dp)); Text("Memeriksa…")
+                            } else {
+                                Icon(Icons.Rounded.SystemUpdate, null); Spacer(Modifier.width(8.dp)); Text("Periksa Pembaruan")
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Periksa otomatis setiap hari", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Switch(checked = upd.auto, onCheckedChange = { upd.setAuto(it) })
+                        }
+                    }
+                }
+            },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text("Tutup") } }
         )
         "reset" -> AlertDialog(

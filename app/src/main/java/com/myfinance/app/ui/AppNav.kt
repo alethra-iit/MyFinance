@@ -1,6 +1,8 @@
 package com.myfinance.app.ui
 
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Description
@@ -8,7 +10,11 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,6 +43,11 @@ fun NavController.goTab(route: String) {
 fun AppNav(vm: AppViewModel, settings: UserSettingsEntity) {
     val nav = rememberNavController()
     val shopVm: ShoppingViewModel = viewModel()
+    val appCtx = LocalContext.current
+    val updScope = rememberCoroutineScope()
+    val upd = remember { UpdateController(appCtx, updScope) }
+    LaunchedEffect(Unit) { upd.onAppStart() }
+    UpdateDialogs(upd)
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val cur = settings.currency
@@ -51,7 +62,10 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (tabs.any { it.route == route }) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBar(
+                    modifier = Modifier.height(64.dp), // default M3 = 80dp, dibuat lebih ramping
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
                     tabs.forEach { t ->
                         NavigationBarItem(
                             selected = route == t.route,
@@ -65,10 +79,10 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity) {
         }
     ) { pad ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { HomeScreen(vm, nav, cur, settings.userName) }
+            composable("home") { HomeScreen(vm, nav, cur, settings.userName, settings.notifications) }
             composable("history") { HistoryScreen(vm, nav, cur) }
             composable("shopping") { ShoppingListScreen(shopVm, nav, cur) }
-            composable("profile") { ProfileScreen(vm, settings) }
+            composable("profile") { ProfileScreen(vm, settings, upd) }
             composable("report") { ReportScreen(vm, nav, cur) }
             composable(
                 "add/{type}?id={id}",

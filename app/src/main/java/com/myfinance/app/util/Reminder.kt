@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -53,17 +54,35 @@ class ReminderWorker(private val ctx: Context, params: WorkerParameters) : Corou
 
 object Reminder {
     private const val NAME = "daily_reminder_work"
+    private const val PREFS = "reminder_prefs"
+
+    fun hour(ctx: Context): Int = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("hour", 20)
+    fun minute(ctx: Context): Int = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("minute", 0)
+    fun label(ctx: Context): String = "%02d.%02d".format(hour(ctx), minute(ctx))
+
+    private fun save(ctx: Context, h: Int, m: Int) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("hour", h).putInt("minute", m).apply()
+    }
+
+    /** Tampilkan pemilih jam. Jika pengingat sedang aktif, jadwal langsung diperbarui. */
+    fun pickTime(ctx: Context, enabled: Boolean, onDone: () -> Unit) {
+        TimePickerDialog(ctx, { _, h, m ->
+            save(ctx, h, m)
+            if (enabled) schedule(ctx)
+            onDone()
+        }, hour(ctx), minute(ctx), true).show()
+    }
 
     fun schedule(ctx: Context) {
         val now = Calendar.getInstance()
         val target = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 20); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
-            if (before(now)) add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, hour(ctx)); set(Calendar.MINUTE, minute(ctx)); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            if (!after(now)) add(Calendar.DAY_OF_MONTH, 1)
         }
         val delay = target.timeInMillis - now.timeInMillis
         val req = PeriodicWorkRequestBuilder<ReminderWorker>(24, TimeUnit.HOURS)
             .setInitialDelay(delay, TimeUnit.MILLISECONDS).build()
-        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, req)
+        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE, req)
     }
 
     fun cancel(ctx: Context) {

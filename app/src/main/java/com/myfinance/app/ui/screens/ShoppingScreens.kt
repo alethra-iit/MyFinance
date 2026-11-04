@@ -236,7 +236,19 @@ fun ShoppingDetailScreen(shop: ShoppingViewModel, app: AppViewModel, listId: Lon
                     Text("${pending.size} barang • ${Fmt.money(pendingTotal, cur)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     Text("Kategori", style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        expCats.forEach { c -> FilterChip(selected = c == cat, onClick = { cat = c }, label = { Text(c) }) }
+                        expCats.forEach { c ->
+                            FilterChip(
+                                selected = c == cat, onClick = { cat = c }, label = { Text(c) },
+                                leadingIcon = if (c == cat) {
+                                    { Icon(Icons.Rounded.Check, null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
+                                } else null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            )
+                        }
                     }
                     Text("Tanggal transaksi", style = MaterialTheme.typography.labelLarge)
                     DateField(date) { date = it }

@@ -2,6 +2,11 @@
 
 package com.myfinance.app.ui.screens
 
+import android.Manifest
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,9 +38,19 @@ import com.myfinance.app.ui.theme.extra
 import com.myfinance.app.util.Dates
 import com.myfinance.app.util.Fmt
 import com.myfinance.app.util.Period
+import com.myfinance.app.util.Reminder
 
 @Composable
-fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: String) {
+fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: String, notificationsOn: Boolean = false) {
+    val ctx = LocalContext.current
+    var showNotif by remember { mutableStateOf(false) }
+    var reminderLabel by remember { mutableStateOf(Reminder.label(ctx)) }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            vm.updateSettings { it.copy(notifications = true) }; Reminder.schedule(ctx)
+            Toast.makeText(ctx, "Pengingat harian aktif (pukul ${Reminder.label(ctx)})", Toast.LENGTH_SHORT).show()
+        } else Toast.makeText(ctx, "Izin notifikasi ditolak", Toast.LENGTH_SHORT).show()
+    }
     val txs by vm.transactions.collectAsState()
     var hidden by rememberSaveable { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -53,6 +69,35 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
     val red = MaterialTheme.extra.expense
     fun money(v: Long) = if (hidden) "${Fmt.symbol(cur)} ••••••" else Fmt.money(v, cur)
 
+    if (showNotif) {
+        AlertDialog(
+            onDismissRequest = { showNotif = false },
+            title = { Text("Pengingat Harian") },
+            text = {
+              Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Ingatkan saya mencatat transaksi setiap hari", Modifier.weight(1f))
+                    Switch(checked = notificationsOn, onCheckedChange = { on ->
+                        if (!on) {
+                            vm.updateSettings { it.copy(notifications = false) }; Reminder.cancel(ctx)
+                        } else if (Build.VERSION.SDK_INT >= 33) {
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            vm.updateSettings { it.copy(notifications = true) }; Reminder.schedule(ctx)
+                            Toast.makeText(ctx, "Pengingat harian aktif (pukul ${Reminder.label(ctx)})", Toast.LENGTH_SHORT).show()
+                        }
+                    })
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { Reminder.pickTime(ctx, notificationsOn) { reminderLabel = Reminder.label(ctx) } }) {
+                    Icon(Icons.Rounded.Schedule, null); Spacer(Modifier.width(8.dp)); Text("Jam pengingat: $reminderLabel")
+                }
+              }
+            },
+            confirmButton = { TextButton(onClick = { showNotif = false }) { Text("Tutup") } }
+        )
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -70,7 +115,9 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
                     Text("MyFinance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("Halo, $userName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { nav.goTab("profile") }) { Icon(Icons.Rounded.Notifications, "Pengaturan notifikasi") }
+                IconButton(onClick = { showNotif = true }) {
+                    Icon(if (notificationsOn) Icons.Rounded.Notifications else Icons.Rounded.NotificationsOff, "Pengaturan notifikasi")
+                }
             }
         }
         // Kartu saldo
