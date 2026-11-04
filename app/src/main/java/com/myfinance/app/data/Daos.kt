@@ -33,8 +33,8 @@ interface TransactionDao {
     @Query("DELETE FROM transactions")
     suspend fun clear()
 
-    @Query("UPDATE transactions SET category = :new WHERE category = :old AND type = :type")
-    suspend fun reassignCategory(old: String, new: String, type: String)
+    @Query("UPDATE transactions SET category = :newName WHERE category = :oldName AND type = :type")
+    suspend fun reassignCategory(oldName: String, newName: String, type: String)
 
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :name AND type = :type")
     suspend fun countByCategory(name: String, type: String): Int
@@ -189,8 +189,8 @@ interface RecurringDao {
     @Query("DELETE FROM recurring")
     suspend fun clear()
 
-    @Query("UPDATE recurring SET category = :new WHERE category = :old AND type = :type")
-    suspend fun reassignCategory(old: String, new: String, type: String)
+    @Query("UPDATE recurring SET category = :newName WHERE category = :oldName AND type = :type")
+    suspend fun reassignCategory(oldName: String, newName: String, type: String)
 
     @Query("SELECT COUNT(*) FROM recurring WHERE category = :name AND type = :type")
     suspend fun countByCategory(name: String, type: String): Int
