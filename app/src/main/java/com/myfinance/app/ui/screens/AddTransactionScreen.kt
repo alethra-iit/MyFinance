@@ -92,7 +92,10 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
                 shape = RoundedCornerShape(16.dp), colors = fieldColors()
             )
             // Kategori
-            Text("Kategori", fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Kategori", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { nav.navigate("categories") }) { Text("Kelola") }
+            }
             FlowRow(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -101,7 +104,7 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
             ) {
                 typeCats.forEach { c ->
                     val sel = c.name == category
-                    val cc = categoryColor(c.name)
+                    val cc = categoryColor(c.name, c.type)
                     Column(
                         Modifier.width(76.dp).clip(RoundedCornerShape(16.dp))
                             .background(if (sel) cc.copy(alpha = .14f) else Color.Transparent)
@@ -114,7 +117,7 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
                                     .background(if (sel) cc else cc.copy(alpha = .12f))
                                     .then(if (sel) Modifier.border(3.dp, cc.copy(alpha = .45f), CircleShape) else Modifier),
                                 contentAlignment = Alignment.Center
-                            ) { Icon(categoryIcon(c.name), null, tint = if (sel) Color.White else cc) }
+                            ) { Icon(categoryIcon(c.name, c.type), null, tint = if (sel) Color.White else cc) }
                             if (sel) {
                                 Box(
                                     Modifier.size(20.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
@@ -153,7 +156,8 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
                             TransactionEntity(
                                 id = if (editing) editId else 0L, type = type, amount = value,
                                 category = category, dateMillis = date, note = note.trim()
-                            )
+                            ),
+                            onAlert = { msg -> Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show() }
                         ) {
                             Toast.makeText(ctx, "Transaksi disimpan", Toast.LENGTH_SHORT).show()
                             nav.popBackStack()

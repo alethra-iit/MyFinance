@@ -30,12 +30,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.myfinance.app.data.DEBT_BORROWED
+import com.myfinance.app.data.DEBT_LENT
 import com.myfinance.app.data.TYPE_EXPENSE
 import com.myfinance.app.data.TYPE_INCOME
 import com.myfinance.app.ui.*
 import com.myfinance.app.ui.theme.Purple
 import com.myfinance.app.ui.theme.extra
 import com.myfinance.app.util.Dates
+import com.myfinance.app.util.budgetStatuses
+import com.myfinance.app.util.daysUntilDue
+import com.myfinance.app.util.isSettled
+import com.myfinance.app.util.remaining
 import com.myfinance.app.util.Fmt
 import com.myfinance.app.util.Period
 import com.myfinance.app.util.Reminder
@@ -52,6 +58,8 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
         } else Toast.makeText(ctx, "Izin notifikasi ditolak", Toast.LENGTH_SHORT).show()
     }
     val txs by vm.transactions.collectAsState()
+    val budgets by vm.budgets.collectAsState()
+    val debts by vm.debts.collectAsState()
     var hidden by rememberSaveable { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<Long?>(null) }
 
@@ -185,6 +193,74 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
                                 Text(money(mExpense), fontWeight = FontWeight.Bold, color = red)
                             }
                         }
+                    }
+                }
+            }
+        }
+        // Anggaran bulan ini
+        item {
+            val statuses = budgetStatuses(budgets, txs, now)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Anggaran Bulan Ini", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { nav.navigate("budget") }) { Text(if (statuses.isEmpty()) "Atur" else "Kelola"); Icon(Icons.Rounded.ChevronRight, null) }
+                }
+                if (statuses.isEmpty()) {
+                    SoftCard(Modifier.fillMaxWidth(), onClick = { nav.navigate("budget") }) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconBubble(Icons.Rounded.Savings, Purple)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Belum ada anggaran", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Tetapkan batas bulanan per kategori dan dapatkan peringatan sebelum kantong jebol.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    statuses.filter { it.level > 0 }.take(3).forEach { BudgetWarningBanner(it, cur, hidden) }
+                    SoftCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            statuses.take(5).forEach { BudgetRow(it, { v -> money(v) }) }
+                            if (statuses.size > 5) {
+                                Text(
+                                    "+${statuses.size - 5} anggaran lainnya", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Utang & piutang (hanya bila ada yang belum lunas)
+        val openDebts = debts.filter { !it.isSettled }
+        if (openDebts.isNotEmpty()) item {
+            val lentSum = openDebts.filter { it.type == DEBT_LENT }.sumOf { it.remaining }
+            val borrowedSum = openDebts.filter { it.type == DEBT_BORROWED }.sumOf { it.remaining }
+            val late = openDebts.count { (it.daysUntilDue(now) ?: 0) < 0 }
+            val soon = openDebts.count { (it.daysUntilDue(now) ?: 99) in 0..3 }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Utang & Piutang", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { nav.navigate("debts") }) { Text("Kelola"); Icon(Icons.Rounded.ChevronRight, null) }
+                }
+                SoftCard(Modifier.fillMaxWidth(), onClick = { nav.navigate("debts") }) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row {
+                            Column(Modifier.weight(1f)) {
+                                Text("Piutang", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(money(lentSum), fontWeight = FontWeight.Bold, color = green)
+                            }
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text("Utang", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(money(borrowedSum), fontWeight = FontWeight.Bold, color = red)
+                            }
+                        }
+                        if (late > 0) Text("$late terlambat dari jatuh tempo", style = MaterialTheme.typography.bodySmall, color = red, fontWeight = FontWeight.SemiBold)
+                        if (soon > 0) Text("$soon jatuh tempo dalam 3 hari ke depan", style = MaterialTheme.typography.bodySmall, color = BudgetAmber, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

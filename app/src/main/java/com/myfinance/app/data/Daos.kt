@@ -32,6 +32,12 @@ interface TransactionDao {
 
     @Query("DELETE FROM transactions")
     suspend fun clear()
+
+    @Query("UPDATE transactions SET category = :new WHERE category = :old AND type = :type")
+    suspend fun reassignCategory(old: String, new: String, type: String)
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE category = :name AND type = :type")
+    suspend fun countByCategory(name: String, type: String): Int
 }
 
 @Dao
@@ -44,6 +50,18 @@ interface CategoryDao {
 
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun count(): Int
+
+    @Query("SELECT * FROM categories WHERE id = :id")
+    suspend fun get(id: Long): CategoryEntity?
+
+    @Insert
+    suspend fun insert(c: CategoryEntity): Long
+
+    @Update
+    suspend fun update(c: CategoryEntity)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun delete(id: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(list: List<CategoryEntity>)
@@ -119,4 +137,88 @@ interface SettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(s: UserSettingsEntity)
+}
+
+@Dao
+interface BudgetDao {
+    @Query("SELECT * FROM budgets")
+    fun observeAll(): Flow<List<BudgetEntity>>
+
+    @Query("SELECT * FROM budgets")
+    suspend fun all(): List<BudgetEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(b: BudgetEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<BudgetEntity>)
+
+    @Query("DELETE FROM budgets WHERE category = :category")
+    suspend fun delete(category: String)
+
+    @Query("DELETE FROM budgets")
+    suspend fun clear()
+}
+
+@Dao
+interface RecurringDao {
+    @Query("SELECT * FROM recurring ORDER BY active DESC, nextDue ASC")
+    fun observeAll(): Flow<List<RecurringEntity>>
+
+    @Query("SELECT * FROM recurring")
+    suspend fun all(): List<RecurringEntity>
+
+    @Query("SELECT * FROM recurring WHERE id = :id")
+    suspend fun get(id: Long): RecurringEntity?
+
+    @Query("SELECT * FROM recurring WHERE active = 1 AND nextDue < :before")
+    suspend fun due(before: Long): List<RecurringEntity>
+
+    @Insert
+    suspend fun insert(r: RecurringEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<RecurringEntity>)
+
+    @Update
+    suspend fun update(r: RecurringEntity)
+
+    @Query("DELETE FROM recurring WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM recurring")
+    suspend fun clear()
+
+    @Query("UPDATE recurring SET category = :new WHERE category = :old AND type = :type")
+    suspend fun reassignCategory(old: String, new: String, type: String)
+
+    @Query("SELECT COUNT(*) FROM recurring WHERE category = :name AND type = :type")
+    suspend fun countByCategory(name: String, type: String): Int
+}
+
+@Dao
+interface DebtDao {
+    @Query("SELECT * FROM debts ORDER BY (paid >= amount) ASC, dueDate IS NULL ASC, dueDate ASC, id DESC")
+    fun observeAll(): Flow<List<DebtEntity>>
+
+    @Query("SELECT * FROM debts")
+    suspend fun all(): List<DebtEntity>
+
+    @Query("SELECT * FROM debts WHERE id = :id")
+    suspend fun get(id: Long): DebtEntity?
+
+    @Insert
+    suspend fun insert(d: DebtEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<DebtEntity>)
+
+    @Update
+    suspend fun update(d: DebtEntity)
+
+    @Query("DELETE FROM debts WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM debts")
+    suspend fun clear()
 }

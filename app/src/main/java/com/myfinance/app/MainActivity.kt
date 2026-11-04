@@ -19,6 +19,8 @@ import com.myfinance.app.ui.AppNav
 import com.myfinance.app.ui.AppViewModel
 import com.myfinance.app.ui.LockScreen
 import com.myfinance.app.ui.theme.MyFinanceTheme
+import com.myfinance.app.util.BudgetAlerts
+import kotlinx.coroutines.launch
 
 // FragmentActivity (turunan ComponentActivity) dibutuhkan oleh BiometricPrompt
 class MainActivity : FragmentActivity() {
@@ -60,6 +62,13 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         lock.onActivityStart()
+        // Catat transaksi berulang yang jatuh tempo (mis. aplikasi lama tidak dibuka), lalu nilai anggaran
+        val app = application as MyFinanceApp
+        app.appScope.launch {
+            runCatching {
+                if (app.repo.processRecurring() > 0) BudgetAlerts.check(app, notify = false)
+            }
+        }
     }
 
     override fun onStop() {

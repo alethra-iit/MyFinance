@@ -4,6 +4,7 @@ import android.app.Application
 import com.myfinance.app.data.AppDatabase
 import com.myfinance.app.data.Repository
 import com.myfinance.app.util.AppLock
+import com.myfinance.app.util.RecurringWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,8 +16,12 @@ class MyFinanceApp : Application() {
     /** Satu instance per proses: tetap terbuka saat layar diputar, terkunci lagi bila proses dimatikan. */
     val lock: AppLock by lazy { AppLock(this) }
 
+    /** Scope untuk pekerjaan singkat yang tidak boleh ikut terhenti saat layar ditutup. */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { repo.seed() }
+        appScope.launch { repo.seed() }
+        RecurringWorker.schedule(this)
     }
 }

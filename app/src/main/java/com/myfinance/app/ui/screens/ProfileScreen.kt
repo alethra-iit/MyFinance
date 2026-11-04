@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import com.myfinance.app.data.UserSettingsEntity
 import com.myfinance.app.ui.*
 import com.myfinance.app.util.AppLock
@@ -39,7 +40,7 @@ import kotlinx.coroutines.withContext
 private const val XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @Composable
-fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateController, lock: AppLock) {
+fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateController, lock: AppLock, nav: NavController) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<String?>(null) }
@@ -150,6 +151,13 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
         }
 
         SoftCard(Modifier.fillMaxWidth()) {
+            SettingRow(Icons.Rounded.Category, "Kelola Kategori", "Tambah, ubah, hapus; pilih ikon dan warna") { nav.navigate("categories") }
+            SettingRow(Icons.Rounded.Savings, "Anggaran Bulanan", "Batas pengeluaran per kategori + peringatan") { nav.navigate("budget") }
+            SettingRow(Icons.Rounded.SwapHoriz, "Utang & Piutang", "Catat pinjaman, jatuh tempo, dan pengingat") { nav.navigate("debts") }
+            SettingRow(Icons.Rounded.Autorenew, "Transaksi Berulang", "Gaji, cicilan, langganan, tagihan otomatis") { nav.navigate("recurring") }
+        }
+
+        SoftCard(Modifier.fillMaxWidth()) {
             SettingRow(Icons.Rounded.CloudUpload, "Backup Data", "Simpan semua data ke berkas") {
                 backupLauncher.launch("myfinance-backup-${Fmt.fileStamp(System.currentTimeMillis())}.json")
             }
@@ -244,7 +252,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
         "reset" -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("Hapus semua data?") },
-            text = { Text("Seluruh transaksi dan catatan belanja akan dihapus permanen. Pengaturan tetap disimpan. Sebaiknya lakukan backup terlebih dahulu.") },
+            text = { Text("Seluruh transaksi dan catatan belanja akan dihapus permanen. Pengaturan, anggaran, transaksi berulang, serta utang/piutang tetap disimpan. Sebaiknya lakukan backup terlebih dahulu.") },
             confirmButton = { TextButton(onClick = { dialog = null; vm.clearAll(); toast("Semua data dihapus") }) { Text("Hapus", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Batal") } }
         )

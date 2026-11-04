@@ -1,5 +1,6 @@
 package com.myfinance.app.util
 
+import com.myfinance.app.data.FREQ_WEEKLY
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -40,6 +41,8 @@ object Fmt {
     fun monthYear(ms: Long) = f("MMM yyyy", ms)
     fun longMonth(ms: Long) = f("MMMM yyyy", ms)
     fun year(ms: Long) = f("yyyy", ms)
+    fun weekday(ms: Long) = f("EEEE", ms)
+    fun dayOfMonth(ms: Long) = f("d", ms)
     fun fileStamp(ms: Long) = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(ms))
 }
 
@@ -79,6 +82,21 @@ object Dates {
         }
         return start to c.timeInMillis
     }
+
+    /** Kemunculan berikutnya setelah [current]. Bulanan: tanggal patokan, dipendekkan di bulan yang lebih pendek. */
+    fun nextOccurrence(freq: String, current: Long, anchorDay: Int): Long {
+        val c = cal(startOfDay(current))
+        if (freq == FREQ_WEEKLY) {
+            c.add(Calendar.DAY_OF_MONTH, 7)
+        } else {
+            c.set(Calendar.DAY_OF_MONTH, 1)
+            c.add(Calendar.MONTH, 1)
+            c.set(Calendar.DAY_OF_MONTH, minOf(anchorDay.coerceAtLeast(1), c.getActualMaximum(Calendar.DAY_OF_MONTH)))
+        }
+        return c.timeInMillis
+    }
+
+    fun dayOfMonthOf(ms: Long): Int = cal(ms).get(Calendar.DAY_OF_MONTH)
 
     fun shift(p: Period, anchor: Long, delta: Int): Long {
         val c = cal(anchor)

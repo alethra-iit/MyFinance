@@ -23,8 +23,61 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<UserSettingsEntity?> =
         repo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    fun saveTransaction(t: TransactionEntity, onDone: () -> Unit = {}) {
-        viewModelScope.launch { repo.saveTransaction(t); onDone() }
+    init {
+        // Ikon & warna kategori dibaca dari mana-mana lewat nama, jadi simpan di satu tempat yang reaktif
+        viewModelScope.launch { categories.collect { CategoryStyles.update(it) } }
+    }
+
+    fun saveCategory(c: CategoryEntity, onDone: () -> Unit = {}) { viewModelScope.launch { repo.saveCategory(c); onDone() } }
+    suspend fun categoryUsage(c: CategoryEntity): Int = repo.categoryUsage(c)
+    fun deleteCategory(id: Long, moveTo: String?, onDone: () -> Unit = {}) {
+        viewModelScope.launch { repo.deleteCategory(id, moveTo); onDone() }
+    }
+
+    val budgets: StateFlow<List<BudgetEntity>> =
+        repo.budgets.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val recurring: StateFlow<List<RecurringEntity>> =
+        repo.recurring.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val debts: StateFlow<List<DebtEntity>> =
+        repo.debts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun saveDebt(d: DebtEntity, onDone: () -> Unit = {}) { viewModelScope.launch { repo.saveDebt(d); onDone() } }
+    fun deleteDebt(id: Long) { viewModelScope.launch { repo.deleteDebt(id) } }
+    fun addPayment(id: Long, amount: Long, recordTx: Boolean, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repo.addPayment(id, amount, recordTx, Dates.today())
+            if (recordTx) runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }
+            onDone()
+        }
+    }
+
+    /** onAlert dipanggil (sebelum onDone) untuk tiap anggaran yang baru mencapai 80% / melewati batas. */
+    fun saveTransaction(t: TransactionEntity, onAlert: (String) -> Unit = {}, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repo.saveTransaction(t)
+            if (t.type == TYPE_EXPENSE) {
+                runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }.getOrDefault(emptyList()).forEach { onAlert(it.message) }
+            }
+            onDone()
+        }
+    }
+
+    fun setBudget(category: String, amount: Long) {
+        viewModelScope.launch { repo.saveBudget(category, amount) }
+    }
+
+    fun saveRecurring(r: RecurringEntity, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repo.saveRecurring(r)
+            repo.processRecurring()   // tanggal mulai hari ini/lampau langsung dicatat
+            runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }
+            onDone()
+        }
+    }
+    fun deleteRecurring(id: Long) { viewModelScope.launch { repo.deleteRecurring(id) } }
+    fun setRecurringActive(id: Long, active: Boolean) {
+        viewModelScope.launch { repo.setRecurringActive(id, active); if (active) repo.processRecurring() }
     }
 
     fun deleteTransaction(id: Long) {

@@ -24,7 +24,11 @@ data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val type: String,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    /** Kunci ikon (lihat CategoryIcons). Kosong = ikon bawaan berdasarkan nama. */
+    val icon: String = "",
+    /** Warna ARGB (non-negatif). 0 = warna bawaan berdasarkan nama. */
+    val color: Long = 0L
 )
 
 @Entity(tableName = "shopping_lists")
@@ -63,6 +67,49 @@ data class UserSettingsEntity(
     val theme: String = "LIGHT",      // LIGHT / DARK / SYSTEM
     val currency: String = "IDR",     // IDR / USD / EUR
     val notifications: Boolean = false
+)
+
+/** Batas pengeluaran bulanan untuk satu kategori. */
+@Entity(tableName = "budgets")
+data class BudgetEntity(
+    @PrimaryKey val category: String,
+    val amount: Long
+)
+
+const val FREQ_WEEKLY = "WEEKLY"
+const val FREQ_MONTHLY = "MONTHLY"
+
+/** Aturan transaksi berulang. Transaksi nyata dibuat otomatis saat nextDue tiba. */
+@Entity(tableName = "recurring")
+data class RecurringEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val type: String,
+    val amount: Long,
+    val category: String,
+    val note: String = "",
+    val frequency: String = FREQ_MONTHLY,
+    /** Tanggal (1-31) patokan untuk pengulangan bulanan; bulan pendek memakai hari terakhir. */
+    val anchorDay: Int = 1,
+    /** Awal hari (millis) kemunculan berikutnya yang belum dicatat. */
+    val nextDue: Long,
+    val active: Boolean = true
+)
+
+const val DEBT_LENT = "LENT"          // piutang: saya meminjamkan, orang lain berutang ke saya
+const val DEBT_BORROWED = "BORROWED"  // utang: saya meminjam, saya berutang ke orang lain
+
+@Entity(tableName = "debts")
+data class DebtEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val person: String,
+    val type: String,
+    val amount: Long,
+    /** Total yang sudah dibayar/diterima (cicilan boleh). Lunas bila paid >= amount. */
+    val paid: Long = 0,
+    /** Awal hari jatuh tempo (millis), null = tanpa jatuh tempo. */
+    val dueDate: Long? = null,
+    val note: String = "",
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 object DefaultCategories {

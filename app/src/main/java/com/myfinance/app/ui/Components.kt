@@ -25,29 +25,61 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.myfinance.app.data.CategoryEntity
+import com.myfinance.app.data.TYPE_EXPENSE
 import com.myfinance.app.data.TYPE_INCOME
 import com.myfinance.app.data.TransactionEntity
 import com.myfinance.app.ui.theme.extra
 import com.myfinance.app.util.Dates
 import com.myfinance.app.util.Fmt
 
-fun categoryIcon(name: String): ImageVector = when (name) {
-    "Gaji" -> Icons.Rounded.AccountBalanceWallet
-    "Bonus" -> Icons.Rounded.Work
-    "Hadiah" -> Icons.Rounded.CardGiftcard
-    "Bisnis" -> Icons.Rounded.Storefront
-    "Investasi" -> Icons.Rounded.Savings
-    "Makanan" -> Icons.Rounded.Restaurant
-    "Transportasi" -> Icons.Rounded.DirectionsBus
-    "Belanja" -> Icons.Rounded.ShoppingBag
-    "Tagihan" -> Icons.Rounded.Receipt
-    "Kesehatan" -> Icons.Rounded.MedicalServices
-    "Pendidikan" -> Icons.Rounded.School
-    "Hiburan" -> Icons.Rounded.Movie
-    else -> Icons.Rounded.MoreHoriz
+/** Gaya kategori buatan pengguna (ikon & warna), diisi dari AppViewModel. Pembacaan memicu recompose saat berubah. */
+object CategoryStyles {
+    private var all by mutableStateOf<List<CategoryEntity>>(emptyList())
+    fun update(list: List<CategoryEntity>) { all = list }
+    fun find(name: String, type: String?): CategoryEntity? {
+        val l = all
+        return if (type != null) l.firstOrNull { it.name == name && it.type == type }
+        else l.firstOrNull { it.name == name && it.type == TYPE_EXPENSE } ?: l.firstOrNull { it.name == name }
+    }
 }
 
-fun categoryColor(name: String): Color = when (name) {
+object CategoryIcons {
+    val all: List<Pair<String, ImageVector>> by lazy {
+        listOf(
+            "wallet" to Icons.Rounded.AccountBalanceWallet, "work" to Icons.Rounded.Work, "gift" to Icons.Rounded.CardGiftcard,
+            "store" to Icons.Rounded.Storefront, "savings" to Icons.Rounded.Savings, "restaurant" to Icons.Rounded.Restaurant,
+            "bus" to Icons.Rounded.DirectionsBus, "bag" to Icons.Rounded.ShoppingBag, "receipt" to Icons.Rounded.Receipt,
+            "medical" to Icons.Rounded.MedicalServices, "school" to Icons.Rounded.School, "movie" to Icons.Rounded.Movie,
+            "cafe" to Icons.Rounded.LocalCafe, "fastfood" to Icons.Rounded.Fastfood, "grocery" to Icons.Rounded.LocalGroceryStore,
+            "car" to Icons.Rounded.DirectionsCar, "fuel" to Icons.Rounded.LocalGasStation, "flight" to Icons.Rounded.Flight,
+            "home" to Icons.Rounded.Home, "bolt" to Icons.Rounded.Bolt, "wifi" to Icons.Rounded.Wifi,
+            "phone" to Icons.Rounded.PhoneAndroid, "computer" to Icons.Rounded.Computer, "fitness" to Icons.Rounded.FitnessCenter,
+            "pets" to Icons.Rounded.Pets, "child" to Icons.Rounded.ChildCare, "games" to Icons.Rounded.SportsEsports,
+            "music" to Icons.Rounded.MusicNote, "clothes" to Icons.Rounded.Checkroom, "spa" to Icons.Rounded.Spa,
+            "build" to Icons.Rounded.Build, "payments" to Icons.Rounded.Payments, "trend" to Icons.Rounded.TrendingUp,
+            "cake" to Icons.Rounded.Cake, "book" to Icons.Rounded.Book, "laundry" to Icons.Rounded.LocalLaundryService,
+            "park" to Icons.Rounded.Park, "beach" to Icons.Rounded.BeachAccess, "favorite" to Icons.Rounded.Favorite,
+            "star" to Icons.Rounded.Star, "subscriptions" to Icons.Rounded.Subscriptions, "more" to Icons.Rounded.MoreHoriz
+        )
+    }
+    private val map by lazy { all.toMap() }
+    fun get(key: String): ImageVector = map[key] ?: Icons.Rounded.MoreHoriz
+}
+
+val CategoryPalette = listOf(
+    Color(0xFFEF4444), Color(0xFFF59E0B), Color(0xFF22C55E), Color(0xFF14B8A6), Color(0xFF0EA5E9), Color(0xFF3B82F6),
+    Color(0xFF8B5CF6), Color(0xFFA855F7), Color(0xFFEC4899), Color(0xFFF43F5E), Color(0xFF8B7CF6)
+)
+
+private fun defaultIconKey(name: String) = when (name) {
+    "Gaji" -> "wallet"; "Bonus" -> "work"; "Hadiah" -> "gift"; "Bisnis" -> "store"; "Investasi" -> "savings"
+    "Makanan" -> "restaurant"; "Transportasi" -> "bus"; "Belanja" -> "bag"; "Tagihan" -> "receipt"
+    "Kesehatan" -> "medical"; "Pendidikan" -> "school"; "Hiburan" -> "movie"
+    else -> "more"
+}
+
+private fun defaultCategoryColor(name: String): Color = when (name) {
     "Gaji" -> Color(0xFF3B82F6)
     "Bonus" -> Color(0xFFF59E0B)
     "Hadiah" -> Color(0xFFEC4899)
@@ -62,6 +94,15 @@ fun categoryColor(name: String): Color = when (name) {
     "Hiburan" -> Color(0xFFA855F7)
     else -> Color(0xFF8B7CF6)
 }
+
+/** Kunci ikon yang berlaku untuk kategori (kustom, atau bawaan berdasarkan nama). */
+fun categoryIconKey(name: String, type: String? = null): String =
+    CategoryStyles.find(name, type)?.icon?.takeIf { it.isNotBlank() } ?: defaultIconKey(name)
+
+fun categoryIcon(name: String, type: String? = null): ImageVector = CategoryIcons.get(categoryIconKey(name, type))
+
+fun categoryColor(name: String, type: String? = null): Color =
+    CategoryStyles.find(name, type)?.color?.takeIf { it != 0L }?.let { Color(it) } ?: defaultCategoryColor(name)
 
 @Composable
 fun IconBubble(icon: ImageVector, tint: Color, size: Dp = 44.dp, modifier: Modifier = Modifier) {
@@ -179,7 +220,7 @@ fun TransactionRow(tx: TransactionEntity, cur: String, onClick: () -> Unit) {
             .padding(horizontal = 4.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconBubble(categoryIcon(tx.category), categoryColor(tx.category))
+        IconBubble(categoryIcon(tx.category, tx.type), categoryColor(tx.category, tx.type))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(tx.note.ifBlank { tx.category }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -225,7 +266,7 @@ fun TransactionDetailSheet(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconBubble(categoryIcon(tx.category), categoryColor(tx.category), 64.dp)
+            IconBubble(categoryIcon(tx.category, tx.type), categoryColor(tx.category, tx.type), 64.dp)
             Spacer(Modifier.height(12.dp))
             Text(Fmt.signed(tx.amount, income, cur), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = color)
             Spacer(Modifier.height(12.dp))

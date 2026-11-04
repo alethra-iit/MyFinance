@@ -92,7 +92,11 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity, lock: AppLock) {
             composable("home") { HomeScreen(vm, nav, cur, settings.userName, settings.notifications) }
             composable("history") { HistoryScreen(vm, nav, cur) }
             composable("shopping") { ShoppingListScreen(shopVm, nav, cur) }
-            composable("profile") { ProfileScreen(vm, settings, upd, lock) }
+            composable("profile") { ProfileScreen(vm, settings, upd, lock, nav) }
+            composable("budget") { BudgetScreen(vm, nav, cur) }
+            composable("categories") { CategoryScreen(vm, nav) }
+            composable("debts") { DebtScreen(vm, nav, cur) }
+            composable("recurring") { RecurringScreen(vm, nav, cur) }
             composable("report") { ReportScreen(vm, nav, cur) }
             composable(
                 "add/{type}?id={id}",
