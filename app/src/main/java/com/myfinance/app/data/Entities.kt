@@ -19,6 +19,25 @@ data class TransactionEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * Lampiran foto struk untuk satu transaksi. Dipisah dari tabel transactions supaya daftar transaksi
+ * tidak ikut memuat string besar. [data] = JPEG yang sudah diperkecil, dalam Base64 (tanpa baris baru).
+ * Ikut terhapus otomatis (CASCADE) saat transaksinya dihapus.
+ */
+@Entity(
+    tableName = "receipts",
+    foreignKeys = [ForeignKey(
+        entity = TransactionEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["transactionId"],
+        onDelete = ForeignKey.CASCADE
+    )]
+)
+data class ReceiptEntity(
+    @PrimaryKey val transactionId: Long,
+    val data: String
+)
+
 @Entity(tableName = "categories")
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

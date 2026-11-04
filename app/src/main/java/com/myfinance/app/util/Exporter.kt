@@ -12,17 +12,40 @@ object Exporter {
 
     private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    /** Membuat berkas .xlsx asli (tanpa library tambahan). */
-    fun xlsx(title: String, txs: List<TransactionEntity>): ByteArray {
+    /** Satu sel Excel maksimal 32.767 karakter, jadi Base64 dipotong per [CHUNK] karakter ke beberapa kolom. */
+    private const val CHUNK = 30_000
+
+    /** 0 -> A, 25 -> Z, 26 -> AA ... (kode lama 'A' + c rusak setelah kolom Z). */
+    private fun col(i: Int): String {
+        var n = i; val sb = StringBuilder()
+        do { sb.insert(0, 'A' + n % 26); n = n / 26 - 1 } while (n >= 0)
+        return sb.toString()
+    }
+
+    private fun cell(sb: Appendable, ref: String, v: Any) {
+        if (v is Long) sb.append("<c r=\"$ref\"><v>$v</v></c>")
+        else sb.append("<c r=\"$ref\" t=\"inlineStr\"><is><t>${esc(v.toString())}</t></is></c>")
+    }
+
+    /**
+     * Membuat berkas .xlsx asli (tanpa library tambahan).
+     * [receipts] = id transaksi -> foto struk Base64. Bila ada, kolom "Struk" ditambahkan di sheet Laporan dan
+     * sheet kedua "Lampiran Struk" berisi Base64-nya (dipotong per kolom). Gabungkan semua bagian lalu decode
+     * Base64 untuk mendapatkan kembali berkas JPEG.
+     */
+    fun xlsx(title: String, txs: List<TransactionEntity>, receipts: Map<Long, String> = emptyMap(), cur: String = "IDR"): ByteArray {
         val rows = mutableListOf<List<Any>>()
         rows += listOf<Any>(title)
-        rows += listOf<Any>("No", "Tanggal", "Jenis", "Kategori", "Keterangan", "Nominal (Rp)")
+        val withReceipts = receipts.isNotEmpty()
+        rows += if (withReceipts) listOf<Any>("No", "Tanggal", "Jenis", "Kategori", "Keterangan", "Nominal (${Fmt.symbol(cur)})", "Struk")
+        else listOf<Any>("No", "Tanggal", "Jenis", "Kategori", "Keterangan", "Nominal (${Fmt.symbol(cur)})")
         txs.forEachIndexed { i, t ->
-            rows += listOf<Any>(
+            val base = listOf<Any>(
                 (i + 1).toLong(), Fmt.date(t.dateMillis),
                 if (t.type == TYPE_INCOME) "Pemasukan" else "Pengeluaran",
                 t.category, t.note, if (t.type == TYPE_INCOME) t.amount else -t.amount
             )
+            rows += if (withReceipts) base + (if (receipts.containsKey(t.id)) "Ada (sheet Lampiran Struk)" else "-") else base
         }
         val inc = txs.filter { it.type == TYPE_INCOME }.sumOf { it.amount }
         val exp = txs.filter { it.type != TYPE_INCOME }.sumOf { it.amount }
@@ -36,11 +59,7 @@ object Exporter {
         sb.append("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>""")
         rows.forEachIndexed { r, row ->
             sb.append("<row r=\"${r + 1}\">")
-            row.forEachIndexed { c, v ->
-                val ref = "${'A' + c}${r + 1}"
-                if (v is Long) sb.append("<c r=\"$ref\"><v>$v</v></c>")
-                else sb.append("<c r=\"$ref\" t=\"inlineStr\"><is><t>${esc(v.toString())}</t></is></c>")
-            }
+            row.forEachIndexed { c, v -> cell(sb, "${col(c)}${r + 1}", v) }
             sb.append("</row>")
         }
         sb.append("</sheetData></worksheet>")
@@ -51,11 +70,35 @@ object Exporter {
                 z.putNextEntry(ZipEntry(name)); z.write(content.toByteArray(Charsets.UTF_8)); z.closeEntry()
             }
             val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"""
-            add("[Content_Types].xml", xml + """<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>""")
+            val ws = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
+            val sheet2Type = if (withReceipts) """<Override PartName="/xl/worksheets/sheet2.xml" ContentType="$ws"/>""" else ""
+            add("[Content_Types].xml", xml + """<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="$ws"/>$sheet2Type</Types>""")
             add("_rels/.rels", xml + """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>""")
-            add("xl/workbook.xml", xml + """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Laporan" sheetId="1" r:id="rId1"/></sheets></workbook>""")
-            add("xl/_rels/workbook.xml.rels", xml + """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>""")
+            add("xl/workbook.xml", xml + """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Laporan" sheetId="1" r:id="rId1"/>${if (withReceipts) """<sheet name="Lampiran Struk" sheetId="2" r:id="rId2"/>""" else ""}</sheets></workbook>""")
+            add("xl/_rels/workbook.xml.rels", xml + """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>${if (withReceipts) """<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>""" else ""}</Relationships>""")
             add("xl/worksheets/sheet1.xml", sb.toString())
+            if (withReceipts) {
+                // Ditulis langsung ke zip (tanpa membangun satu string raksasa) karena Base64 ukurannya besar
+                z.putNextEntry(ZipEntry("xl/worksheets/sheet2.xml"))
+                val w = z.writer(Charsets.UTF_8)
+                w.write("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>""")
+                w.write("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>""")
+                fun line(r: Int, cells: List<Any>) {
+                    w.write("<row r=\"$r\">")
+                    cells.forEachIndexed { c, v -> cell(w, "${col(c)}$r", v) }
+                    w.write("</row>")
+                }
+                line(1, listOf("No (sama dengan sheet Laporan)", "Tanggal", "Keterangan", "Format", "Jumlah bagian", "Bagian 1, 2, 3, ... (gabungkan berurutan lalu decode Base64)"))
+                var r = 2
+                txs.forEachIndexed { i, t ->
+                    val data = receipts[t.id] ?: return@forEachIndexed
+                    val parts = data.chunked(CHUNK)
+                    line(r++, listOf<Any>((i + 1).toLong(), Fmt.date(t.dateMillis), t.note.ifBlank { t.category }, "image/jpeg", parts.size.toLong()) + parts)
+                }
+                w.write("</sheetData></worksheet>")
+                w.flush()
+                z.closeEntry()
+            }
         }
         return bos.toByteArray()
     }

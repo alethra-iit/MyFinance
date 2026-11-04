@@ -186,7 +186,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
             { dialog = null }
         ) { v -> dialog = null; vm.updateSettings { it.copy(theme = v) } }
         "currency" -> ChoiceDialog(
-            "Pilih Mata Uang", listOf("IDR" to "Rupiah (Rp)", "USD" to "Dolar AS (\$)", "EUR" to "Euro (€)"), settings.currency,
+            "Pilih Mata Uang", listOf("IDR" to "Rupiah (Rp)", "USD" to "Dolar AS (\$)"), settings.currency,
             { dialog = null }
         ) { v -> dialog = null; vm.updateSettings { it.copy(currency = v) } }
         "export" -> AlertDialog(
@@ -292,8 +292,8 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
 }
 
 private fun lockTimeoutLabel(s: Int) = when (s) { 0 -> "Segera"; 60 -> "Setelah 1 menit"; 300 -> "Setelah 5 menit"; else -> "Setelah $s detik" }
+private fun currencyLabel(c: String) = when (c) { "USD" -> "Dolar AS"; else -> "Rupiah" }
 private fun themeLabel(t: String) = when (t) { "DARK" -> "Gelap"; "SYSTEM" -> "Ikuti Sistem"; else -> "Terang" }
-private fun currencyLabel(c: String) = when (c) { "USD" -> "Dolar AS"; "EUR" -> "Euro"; else -> "Rupiah" }
 
 @Composable
 private fun SettingRow(
@@ -330,7 +330,8 @@ private fun ChoiceDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { Column { options.forEach { (k, label) -> RadioLine(label, k == selected) { onSelect(k) } } } },
+        // Bisa di-scroll: daftar mata uang lebih panjang dari tinggi dialog
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { options.forEach { (k, label) -> RadioLine(label, k == selected) { onSelect(k) } } } },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
     )
 }

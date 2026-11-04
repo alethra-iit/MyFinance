@@ -222,3 +222,31 @@ interface DebtDao {
     @Query("DELETE FROM debts")
     suspend fun clear()
 }
+
+@Dao
+interface ReceiptDao {
+    /** Hanya id transaksi yang punya struk (untuk penanda di daftar), tanpa memuat gambarnya. */
+    @Query("SELECT transactionId FROM receipts")
+    fun observeIds(): Flow<List<Long>>
+
+    @Query("SELECT data FROM receipts WHERE transactionId = :id")
+    suspend fun get(id: Long): String?
+
+    @Query("SELECT * FROM receipts WHERE transactionId IN (:ids)")
+    suspend fun forIds(ids: List<Long>): List<ReceiptEntity>
+
+    @Query("SELECT * FROM receipts")
+    suspend fun all(): List<ReceiptEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(r: ReceiptEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<ReceiptEntity>)
+
+    @Query("DELETE FROM receipts WHERE transactionId = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM receipts")
+    suspend fun clear()
+}

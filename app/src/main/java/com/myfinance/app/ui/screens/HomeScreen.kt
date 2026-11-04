@@ -58,6 +58,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
         } else Toast.makeText(ctx, "Izin notifikasi ditolak", Toast.LENGTH_SHORT).show()
     }
     val txs by vm.transactions.collectAsState()
+    val receiptIds by vm.receiptIds.collectAsState()
     val budgets by vm.budgets.collectAsState()
     val debts by vm.debts.collectAsState()
     var hidden by rememberSaveable { mutableStateOf(false) }
@@ -275,14 +276,15 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
         if (txs.isEmpty()) {
             item { EmptyState("Belum ada transaksi. Mulai dengan menambah pemasukan atau pengeluaran.") }
         } else {
-            items(txs.take(6), key = { it.id }) { t -> TransactionRow(t, cur) { selectedId = t.id } }
+            items(txs.take(6), key = { it.id }) { t -> TransactionRow(t, cur, hasReceipt = t.id in receiptIds) { selectedId = t.id } }
         }
     }
 
     val selected = txs.firstOrNull { it.id == selectedId }
+    val receipt = rememberReceipt(vm, selected?.id, selected != null && selected.id in receiptIds)
     if (selected != null) {
         TransactionDetailSheet(
-            selected, cur,
+            selected, cur, receipt = receipt,
             onDismiss = { selectedId = null },
             onEdit = { selectedId = null; nav.navigate("add/${selected.type}?id=${selected.id}") },
             onDelete = { vm.deleteTransaction(selected.id); selectedId = null }

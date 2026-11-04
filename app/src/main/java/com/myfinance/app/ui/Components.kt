@@ -213,7 +213,7 @@ fun DateField(value: Long, onChange: (Long) -> Unit) {
 }
 
 @Composable
-fun TransactionRow(tx: TransactionEntity, cur: String, onClick: () -> Unit) {
+fun TransactionRow(tx: TransactionEntity, cur: String, hasReceipt: Boolean = false, onClick: () -> Unit) {
     val income = tx.type == TYPE_INCOME
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
@@ -223,7 +223,19 @@ fun TransactionRow(tx: TransactionEntity, cur: String, onClick: () -> Unit) {
         IconBubble(categoryIcon(tx.category, tx.type), categoryColor(tx.category, tx.type))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(tx.note.ifBlank { tx.category }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    tx.note.ifBlank { tx.category }, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
+                )
+                if (hasReceipt) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Rounded.Receipt, "Ada foto struk", Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Text(
                 "${Fmt.date(tx.dateMillis)} • ${if (income) "Pemasukan" else "Pengeluaran"}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -256,9 +268,11 @@ fun EmptyState(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun TransactionDetailSheet(
     tx: TransactionEntity, cur: String,
-    onDismiss: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit
+    onDismiss: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
+    receipt: String? = null
 ) {
     val income = tx.type == TYPE_INCOME
+    var viewReceipt by remember { mutableStateOf(false) }
     val color = if (income) MaterialTheme.extra.income else MaterialTheme.extra.expense
     var confirm by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
@@ -274,6 +288,15 @@ fun TransactionDetailSheet(
             DetailRow("Kategori", tx.category)
             DetailRow("Tanggal", Fmt.date(tx.dateMillis))
             DetailRow("Keterangan", tx.note.ifBlank { "-" })
+            if (receipt != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Foto Struk (ketuk untuk memperbesar)", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.Start)
+                )
+                Spacer(Modifier.height(6.dp))
+                ReceiptThumb(receipt) { viewReceipt = true }
+            }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f).height(48.dp)) {
@@ -288,6 +311,7 @@ fun TransactionDetailSheet(
             }
         }
     }
+    if (viewReceipt && receipt != null) ReceiptViewerDialog(receipt) { viewReceipt = false }
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },

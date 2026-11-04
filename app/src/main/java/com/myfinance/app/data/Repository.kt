@@ -16,7 +16,8 @@ data class AllData(
     val settings: UserSettingsEntity?,
     val budgets: List<BudgetEntity> = emptyList(),
     val recurring: List<RecurringEntity> = emptyList(),
-    val debts: List<DebtEntity> = emptyList()
+    val debts: List<DebtEntity> = emptyList(),
+    val receipts: List<ReceiptEntity> = emptyList()
 )
 
 class Repository(private val db: AppDatabase) {
@@ -27,6 +28,7 @@ class Repository(private val db: AppDatabase) {
     private val bud = db.budgetDao()
     private val rec = db.recurringDao()
     private val debt = db.debtDao()
+    private val rcp = db.receiptDao()
 
     val transactions: Flow<List<TransactionEntity>> = tx.observeAll()
     val categories: Flow<List<CategoryEntity>> = cat.observeAll()
@@ -36,6 +38,7 @@ class Repository(private val db: AppDatabase) {
     val budgets: Flow<List<BudgetEntity>> = bud.observeAll()
     val recurring: Flow<List<RecurringEntity>> = rec.observeAll()
     val debts: Flow<List<DebtEntity>> = debt.observeAll()
+    val receiptIds: Flow<List<Long>> = rcp.observeIds()
 
     suspend fun seed() {
         if (cat.count() == 0) cat.insertAll(DefaultCategories.all())
@@ -43,10 +46,25 @@ class Repository(private val db: AppDatabase) {
     }
 
     // ---------- Transaksi ----------
-    suspend fun saveTransaction(t: TransactionEntity) {
-        if (t.id == 0L) tx.insert(t) else tx.update(t)
+    /**
+     * Menyimpan transaksi. Lampiran struk hanya disentuh bila [updateReceipt] = true:
+     * [receipt] berisi Base64 untuk dipasang/diganti, atau null/kosong untuk menghapus.
+     * Transaksi dan lampirannya disimpan dalam satu transaksi database.
+     */
+    suspend fun saveTransaction(t: TransactionEntity, receipt: String? = null, updateReceipt: Boolean = false) {
+        db.withTransaction {
+            val id = if (t.id == 0L) tx.insert(t) else { tx.update(t); t.id }
+            if (updateReceipt) {
+                if (receipt.isNullOrEmpty()) rcp.delete(id) else rcp.upsert(ReceiptEntity(id, receipt))
+            }
+        }
     }
-    suspend fun deleteTransaction(id: Long) = tx.delete(id)
+    suspend fun deleteTransaction(id: Long) = db.withTransaction { rcp.delete(id); tx.delete(id) }
+    suspend fun getReceipt(transactionId: Long): String? = rcp.get(transactionId)
+
+    /** Struk untuk daftar id tertentu (dipecah agar tidak melewati batas variabel SQLite). */
+    suspend fun receiptsFor(ids: List<Long>): Map<Long, String> =
+        ids.chunked(500).flatMap { rcp.forIds(it) }.associate { it.transactionId to it.data }
     suspend fun getTransaction(id: Long) = tx.get(id)
 
     // ---------- Kategori ----------
@@ -213,12 +231,15 @@ class Repository(private val db: AppDatabase) {
         }
 
     // ---------- Backup / restore ----------
-    suspend fun allData() = AllData(tx.all(), cat.all(), shop.allLists(), shop.allItems(), set.get(), bud.all(), rec.all(), debt.all())
+    suspend fun allData() = AllData(tx.all(), cat.all(), shop.allLists(), shop.allItems(), set.get(), bud.all(), rec.all(), debt.all(), rcp.all())
 
     suspend fun restore(d: AllData) = db.withTransaction {
-        shop.clearItems(); shop.clearLists(); tx.clear(); cat.clear(); bud.clear(); rec.clear(); debt.clear()
+        shop.clearItems(); shop.clearLists(); rcp.clear(); tx.clear(); cat.clear(); bud.clear(); rec.clear(); debt.clear()
         if (d.categories.isNotEmpty()) cat.insertAll(d.categories) else cat.insertAll(DefaultCategories.all())
         tx.insertAll(d.transactions)
+        // Hanya struk yang transaksinya ada (kalau tidak, batasan foreign key menolak seluruh restore)
+        val txIds = d.transactions.map { it.id }.toSet()
+        rcp.insertAll(d.receipts.filter { it.transactionId in txIds })
         shop.insertLists(d.lists)
         shop.insertItems(d.items)
         bud.insertAll(d.budgets)
@@ -228,6 +249,6 @@ class Repository(private val db: AppDatabase) {
     }
 
     suspend fun clearAll() = db.withTransaction {
-        shop.clearItems(); shop.clearLists(); tx.clear()
+        shop.clearItems(); shop.clearLists(); rcp.clear(); tx.clear()
     }
 }

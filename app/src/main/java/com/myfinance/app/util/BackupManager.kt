@@ -52,6 +52,9 @@ object BackupManager {
                     .put("note", it.note).put("createdAt", it.createdAt))
             }
         })
+        root.put("receipts", JSONArray().also { a ->
+            d.receipts.forEach { a.put(JSONObject().put("transactionId", it.transactionId).put("data", it.data)) }
+        })
         d.settings?.let {
             root.put("settings", JSONObject().put("userName", it.userName).put("theme", it.theme)
                 .put("currency", it.currency).put("notifications", it.notifications))
@@ -94,6 +97,9 @@ object BackupManager {
                 DebtEntity(it.getLong("id"), it.getString("person"), it.getString("type"), it.getLong("amount"),
                     it.optLong("paid", 0L), if (it.isNull("dueDate")) null else it.getLong("dueDate"),
                     it.optString("note", ""), it.optLong("createdAt", System.currentTimeMillis()))
+            } ?: emptyList(),
+            receipts = r.optJSONArray("receipts")?.map {
+                ReceiptEntity(it.getLong("transactionId"), it.getString("data"))
             } ?: emptyList()
         )
     }

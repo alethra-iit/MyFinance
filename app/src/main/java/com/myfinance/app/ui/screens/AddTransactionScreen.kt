@@ -48,8 +48,14 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
     var note by rememberSaveable { mutableStateOf("") }
     var loaded by remember { mutableStateOf(editId < 0) }
     val editing = editId >= 0
+    // Draf struk hidup di ViewModel; flag ini mencegah draf direset saat layar diputar (rememberSaveable ikut pulih)
+    var receiptInit by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(editId) {
+        if (!receiptInit) {
+            vm.resetReceiptDraft(if (editId >= 0) vm.getReceipt(editId) else null)
+            receiptInit = true
+        }
         if (editId >= 0) {
             vm.getTransaction(editId)?.let {
                 type = it.type; amount = it.amount.toString(); category = it.category
@@ -145,6 +151,8 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
                 placeholder = { Text(if (type == TYPE_INCOME) "Contoh: Gaji bulan ini" else "Contoh: Makan siang") },
                 minLines = 2, shape = RoundedCornerShape(16.dp), colors = fieldColors()
             )
+            // Foto struk
+            ReceiptPickerSection(vm)
             Spacer(Modifier.height(4.dp))
             Button(
                 onClick = {

@@ -1,6 +1,10 @@
 package com.myfinance.app.ui
 
 import android.app.Application
+import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.myfinance.app.MyFinanceApp
@@ -9,6 +13,7 @@ import com.myfinance.app.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -22,6 +27,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repo.categories.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val settings: StateFlow<UserSettingsEntity?> =
         repo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Id transaksi yang punya foto struk (untuk ikon penanda di daftar; gambarnya sendiri tidak dimuat). */
+    val receiptIds: StateFlow<Set<Long>> =
+        repo.receiptIds.map { it.toSet() }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    // ---------- Draf foto struk untuk layar tambah/ubah transaksi ----------
+    // Disimpan di ViewModel (bukan rememberSaveable) karena Base64 ~100 KB bisa melewati batas Bundle saat rotasi layar.
+    /** Base64 struk yang sedang ditampilkan di form; null = tidak ada. */
+    var receiptDraft by mutableStateOf<String?>(null); private set
+    /** true bila pengguna memasang/mengganti/menghapus struk di form ini (bila false, struk lama tidak disentuh). */
+    var receiptDirty by mutableStateOf(false); private set
+    var receiptBusy by mutableStateOf(false); private set
+
+    fun resetReceiptDraft(existing: String? = null) { receiptDraft = existing; receiptDirty = false; receiptBusy = false }
+    fun removeReceiptDraft() { receiptDraft = null; receiptDirty = true }
+    suspend fun getReceipt(transactionId: Long): String? = repo.getReceipt(transactionId)
+
+    /** Baca, perkecil, dan kompres foto di thread latar belakang, lalu jadikan draf. onResult(false) bila gagal dibaca. */
+    fun attachReceipt(uri: Uri, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            receiptBusy = true
+            val b64 = withContext(Dispatchers.IO) {
+                runCatching { ReceiptImage.encode(getApplication<Application>().contentResolver, uri) }.getOrNull()
+            }
+            receiptBusy = false
+            if (b64 != null) { receiptDraft = b64; receiptDirty = true }
+            onResult(b64 != null)
+        }
+    }
 
     init {
         // Ikon & warna kategori dibaca dari mana-mana lewat nama, jadi simpan di satu tempat yang reaktif
@@ -55,7 +89,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** onAlert dipanggil (sebelum onDone) untuk tiap anggaran yang baru mencapai 80% / melewati batas. */
     fun saveTransaction(t: TransactionEntity, onAlert: (String) -> Unit = {}, onDone: () -> Unit = {}) {
         viewModelScope.launch {
-            repo.saveTransaction(t)
+            repo.saveTransaction(t, receiptDraft, receiptDirty)
+            resetReceiptDraft()
             if (t.type == TYPE_EXPENSE) {
                 runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }.getOrDefault(emptyList()).forEach { onAlert(it.message) }
             }
@@ -118,7 +153,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> { list = all; title = "Laporan Keuangan - Semua Data" }
         }
         val sorted = list.sortedBy { it.dateMillis }
-        if (format == "PDF") Exporter.pdf(title, sorted, cur) else Exporter.xlsx(title, sorted)
+        if (format == "PDF") Exporter.pdf(title, sorted, cur)
+        else Exporter.xlsx(title, sorted, repo.receiptsFor(sorted.map { it.id }), cur)
     }
 }
 

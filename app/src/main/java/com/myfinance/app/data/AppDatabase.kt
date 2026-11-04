@@ -16,9 +16,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         UserSettingsEntity::class,
         BudgetEntity::class,
         RecurringEntity::class,
-        DebtEntity::class
+        DebtEntity::class,
+        ReceiptEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun recurringDao(): RecurringDao
     abstract fun debtDao(): DebtDao
+    abstract fun receiptDao(): ReceiptDao
 
     companion object {
         /** v1 -> v2: tambah tabel anggaran & transaksi berulang. Data lama tidak disentuh. */
@@ -62,9 +64,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 -> v5: tabel lampiran foto struk (Base64). Data lama tidak disentuh. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `receipts` (`transactionId` INTEGER NOT NULL, `data` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`transactionId`), " +
+                        "FOREIGN KEY(`transactionId`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx.applicationContext, AppDatabase::class.java, "myfinance.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }
