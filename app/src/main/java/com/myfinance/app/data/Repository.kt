@@ -89,6 +89,7 @@ class Repository(private val db: AppDatabase) {
                     cat.update(c.copy(type = old.type, sortOrder = old.sortOrder))
                 }
             }
+            Unit // pastikan blok transaksi tidak berakhir pada if tanpa else
         }
     }
 
