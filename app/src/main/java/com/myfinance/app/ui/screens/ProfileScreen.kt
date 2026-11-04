@@ -8,6 +8,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.myfinance.app.data.UserSettingsEntity
 import com.myfinance.app.ui.*
+import com.myfinance.app.util.AppLock
 import com.myfinance.app.util.Fmt
 import com.myfinance.app.util.Reminder
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +39,7 @@ import kotlinx.coroutines.withContext
 private const val XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 @Composable
-fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateController) {
+fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateController, lock: AppLock) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialog by remember { mutableStateOf<String?>(null) }
@@ -45,6 +47,8 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
     var pendingRestore by remember { mutableStateOf<Uri?>(null) }
     var exportFormat by remember { mutableStateOf("XLSX") }
     var exportRange by remember { mutableStateOf("MONTH") }
+    var pinMode by remember { mutableStateOf<PinMode?>(null) }
+    val bioStatus = remember(lock.enabled, pinMode) { AppLock.biometricStatus(ctx) }
 
     fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
 
@@ -118,6 +122,34 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
         }
 
         SoftCard(Modifier.fillMaxWidth()) {
+            SettingRow(
+                Icons.Rounded.Lock, "Kunci Aplikasi",
+                if (lock.enabled) "Aktif · PIN" + (if (lock.biometric) " + sidik jari" else "") else "Lindungi data keuangan dengan PIN",
+                trailing = {
+                    Switch(checked = lock.enabled, onCheckedChange = { on -> pinMode = if (on) PinMode.SET else PinMode.DISABLE })
+                }
+            ) { pinMode = if (lock.enabled) PinMode.DISABLE else PinMode.SET }
+            if (lock.enabled) {
+                SettingRow(Icons.Rounded.Password, "Ubah PIN") { pinMode = PinMode.CHANGE }
+                SettingRow(
+                    Icons.Rounded.Fingerprint, "Buka dengan sidik jari",
+                    if (bioStatus == BiometricManager.BIOMETRIC_SUCCESS) "PIN tetap bisa dipakai sebagai cadangan"
+                    else "Tidak tersedia: belum ada sidik jari terdaftar di perangkat",
+                    trailing = {
+                        Switch(
+                            checked = lock.biometric, enabled = bioStatus == BiometricManager.BIOMETRIC_SUCCESS || lock.biometric,
+                            onCheckedChange = { lock.setBiometric(it) }
+                        )
+                    }
+                ) {
+                    if (bioStatus == BiometricManager.BIOMETRIC_SUCCESS) lock.setBiometric(!lock.biometric)
+                    else toast("Daftarkan sidik jari di Pengaturan perangkat terlebih dahulu")
+                }
+                SettingRow(Icons.Rounded.Timer, "Kunci otomatis", lockTimeoutLabel(lock.timeoutSec)) { dialog = "locktimeout" }
+            }
+        }
+
+        SoftCard(Modifier.fillMaxWidth()) {
             SettingRow(Icons.Rounded.CloudUpload, "Backup Data", "Simpan semua data ke berkas") {
                 backupLauncher.launch("myfinance-backup-${Fmt.fileStamp(System.currentTimeMillis())}.json")
             }
@@ -174,6 +206,10 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Batal") } }
         )
+        "locktimeout" -> ChoiceDialog(
+            "Kunci otomatis", listOf("0" to "Segera", "30" to "Setelah 30 detik", "60" to "Setelah 1 menit", "300" to "Setelah 5 menit"),
+            lock.timeoutSec.toString(), { dialog = null }
+        ) { v -> dialog = null; lock.setTimeout(v.toInt()) }
         "about" -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("MyFinance") },
@@ -214,6 +250,14 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
         )
     }
 
+    pinMode?.let { m ->
+        PinFlowDialog(m, lock, onDismiss = { pinMode = null }) { msg ->
+            pinMode = null; toast(msg)
+            // Setelah kunci pertama kali aktif, tawarkan sidik jari otomatis bila tersedia
+            if (m == PinMode.SET && AppLock.biometricAvailable(ctx)) lock.setBiometric(true)
+        }
+    }
+
     val restoreUri = pendingRestore
     if (restoreUri != null) {
         AlertDialog(
@@ -239,6 +283,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
     }
 }
 
+private fun lockTimeoutLabel(s: Int) = when (s) { 0 -> "Segera"; 60 -> "Setelah 1 menit"; 300 -> "Setelah 5 menit"; else -> "Setelah $s detik" }
 private fun themeLabel(t: String) = when (t) { "DARK" -> "Gelap"; "SYSTEM" -> "Ikuti Sistem"; else -> "Terang" }
 private fun currencyLabel(c: String) = when (c) { "USD" -> "Dolar AS"; "EUR" -> "Euro"; else -> "Rupiah" }
 

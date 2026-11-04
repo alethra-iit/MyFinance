@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.MyFinance" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.MyFinance" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">#FF111120</item>
     </style>
 </resources>

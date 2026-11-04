@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -28,6 +29,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.myfinance.app.data.UserSettingsEntity
 import com.myfinance.app.ui.screens.*
+import com.myfinance.app.util.AppLock
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
@@ -40,7 +42,7 @@ fun NavController.goTab(route: String) {
 }
 
 @Composable
-fun AppNav(vm: AppViewModel, settings: UserSettingsEntity) {
+fun AppNav(vm: AppViewModel, settings: UserSettingsEntity, lock: AppLock) {
     val nav = rememberNavController()
     val shopVm: ShoppingViewModel = viewModel()
     val appCtx = LocalContext.current
@@ -71,7 +73,15 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity) {
                             selected = route == t.route,
                             onClick = { nav.goTab(t.route) },
                             icon = { Icon(t.icon, t.label) },
-                            label = { Text(t.label) }
+                            label = { Text(t.label, fontWeight = if (route == t.route) FontWeight.Bold else FontWeight.Normal) },
+                            // Tab aktif: pil berwarna penuh + ikon putih, tab lain redup, supaya jelas bedanya
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.primary,
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         )
                     }
                 }
@@ -82,7 +92,7 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity) {
             composable("home") { HomeScreen(vm, nav, cur, settings.userName, settings.notifications) }
             composable("history") { HistoryScreen(vm, nav, cur) }
             composable("shopping") { ShoppingListScreen(shopVm, nav, cur) }
-            composable("profile") { ProfileScreen(vm, settings, upd) }
+            composable("profile") { ProfileScreen(vm, settings, upd, lock) }
             composable("report") { ReportScreen(vm, nav, cur) }
             composable(
                 "add/{type}?id={id}",
