@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +35,7 @@ import com.myfinance.app.data.DEBT_BORROWED
 import com.myfinance.app.data.DEBT_LENT
 import com.myfinance.app.data.TYPE_EXPENSE
 import com.myfinance.app.data.TYPE_INCOME
+import com.myfinance.app.data.WalletEntity
 import com.myfinance.app.ui.*
 import com.myfinance.app.ui.theme.Purple
 import com.myfinance.app.ui.theme.extra
@@ -61,12 +63,17 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
     val receiptIds by vm.receiptIds.collectAsState()
     val budgets by vm.budgets.collectAsState()
     val debts by vm.debts.collectAsState()
+    val wallets by vm.wallets.collectAsState()
+    val balances by vm.balances.collectAsState()
     var hidden by rememberSaveable { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<Long?>(null) }
 
     val totalIncome = txs.filter { it.type == TYPE_INCOME }.sumOf { it.amount }
     val totalExpense = txs.filter { it.type == TYPE_EXPENSE }.sumOf { it.amount }
-    val balance = totalIncome - totalExpense
+    // Saldo = jumlah saldo semua dompet. Selama dompet belum termuat, pakai hitungan lama agar tidak sempat tampil 0.
+    val balance = if (wallets.isEmpty()) totalIncome - totalExpense else wallets.sumOf { balances[it.id] ?: 0L }
+    val multiWallet = wallets.size > 1
+    val walletNames = remember(wallets) { wallets.associate { it.id to it.name } }
 
     val now = System.currentTimeMillis()
     val (ms, me) = Dates.range(Period.MONTH, now)
@@ -138,7 +145,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Saldo Saat Ini", color = Color.White.copy(alpha = .9f), modifier = Modifier.weight(1f))
+                        Text(if (multiWallet) "Total Saldo" else "Saldo Saat Ini", color = Color.White.copy(alpha = .9f), modifier = Modifier.weight(1f))
                         IconButton(onClick = { hidden = !hidden }, modifier = Modifier.size(32.dp)) {
                             Icon(if (hidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, "Tampilkan/sembunyikan saldo", tint = Color.White)
                         }
@@ -159,6 +166,32 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
                 QuickAction(Icons.Rounded.ArrowDownward, "Tambah Pengeluaran", red, { nav.navigate("add/$TYPE_EXPENSE") }, Modifier.weight(1f))
                 QuickAction(Icons.Rounded.ShoppingCart, "Belanja", Purple, { nav.goTab("shopping") }, Modifier.weight(1f))
                 QuickAction(Icons.Rounded.BarChart, "Lihat Laporan", Color(0xFF3B82F6), { nav.navigate("report") }, Modifier.weight(1f))
+            }
+        }
+        // Dompet
+        if (wallets.isNotEmpty()) item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Dompet Saya", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { nav.navigate("wallets") }) { Text("Kelola"); Icon(Icons.Rounded.ChevronRight, null) }
+                }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(wallets, key = { it.id }) { w ->
+                        val bal = balances[w.id] ?: 0L
+                        WalletMiniCard(w, money(bal), bal < 0, red) { nav.navigate("wallets") }
+                    }
+                    item {
+                        SoftCard(Modifier.width(120.dp), onClick = { nav.navigate("wallets?transfer=true") }) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                IconBubble(Icons.Rounded.SwapHoriz, MaterialTheme.colorScheme.primary, size = 36.dp)
+                                Column {
+                                    Text("Transfer", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                    Text("Antar dompet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         // Ringkasan bulan ini
@@ -276,7 +309,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
         if (txs.isEmpty()) {
             item { EmptyState("Belum ada transaksi. Mulai dengan menambah pemasukan atau pengeluaran.") }
         } else {
-            items(txs.take(6), key = { it.id }) { t -> TransactionRow(t, cur, hasReceipt = t.id in receiptIds) { selectedId = t.id } }
+            items(txs.take(6), key = { it.id }) { t -> TransactionRow(t, cur, hasReceipt = t.id in receiptIds, walletName = if (multiWallet) walletNames[t.walletId] else null) { selectedId = t.id } }
         }
     }
 
@@ -285,10 +318,27 @@ fun HomeScreen(vm: AppViewModel, nav: NavController, cur: String, userName: Stri
     if (selected != null) {
         TransactionDetailSheet(
             selected, cur, receipt = receipt,
+            walletName = if (multiWallet) walletNames[selected.walletId] else null,
             onDismiss = { selectedId = null },
             onEdit = { selectedId = null; nav.navigate("add/${selected.type}?id=${selected.id}") },
             onDelete = { vm.deleteTransaction(selected.id); selectedId = null }
         )
+    }
+}
+
+@Composable
+private fun WalletMiniCard(w: WalletEntity, balanceText: String, negative: Boolean, negativeColor: Color, onClick: () -> Unit) {
+    SoftCard(Modifier.width(150.dp), onClick = onClick) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconBubble(walletIcon(w.kind), walletColor(w.kind), size = 36.dp)
+            Column {
+                Text(w.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(
+                    balanceText, fontWeight = FontWeight.Bold, maxLines = 1,
+                    color = if (negative) negativeColor else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
     }
 }
 

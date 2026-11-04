@@ -117,6 +117,7 @@ fun ShoppingDetailScreen(shop: ShoppingViewModel, app: AppViewModel, listId: Lon
     val lists by shop.lists.collectAsState()
     val allItems by shop.items.collectAsState()
     val cats by app.categories.collectAsState()
+    val wallets by app.wallets.collectAsState()
     val list = lists.firstOrNull { it.id == listId }
 
     var adding by remember { mutableStateOf(false) }
@@ -263,6 +264,8 @@ fun ShoppingDetailScreen(shop: ShoppingViewModel, app: AppViewModel, listId: Lon
         val expCats = cats.filter { it.type == TYPE_EXPENSE }.sortedBy { it.sortOrder }.map { it.name }
         var cat by remember { mutableStateOf(if ("Belanja" in expCats) "Belanja" else expCats.firstOrNull() ?: "Belanja") }
         var date by remember { mutableStateOf(Dates.today()) }
+        var walletId by remember { mutableStateOf(-1L) }
+        val selectedWallet = effectiveWalletId(wallets, walletId)
         AlertDialog(
             onDismissRequest = { converting = false },
             title = { Text("Catat sebagai Pengeluaran") },
@@ -285,6 +288,10 @@ fun ShoppingDetailScreen(shop: ShoppingViewModel, app: AppViewModel, listId: Lon
                             )
                         }
                     }
+                    if (wallets.size > 1) {
+                        Text("Dibayar dari dompet", style = MaterialTheme.typography.labelLarge)
+                        WalletPicker(wallets, selectedWallet, { walletId = it })
+                    }
                     Text("Tanggal transaksi", style = MaterialTheme.typography.labelLarge)
                     DateField(date) { date = it }
                 }
@@ -292,7 +299,7 @@ fun ShoppingDetailScreen(shop: ShoppingViewModel, app: AppViewModel, listId: Lon
             confirmButton = {
                 TextButton(onClick = {
                     converting = false
-                    shop.convert(listId, cat, date) { r, alerts ->
+                    shop.convert(listId, cat, date, selectedWallet) { r, alerts ->
                         val msg = when (r) {
                             ConvertResult.OK -> "Berhasil dicatat sebagai pengeluaran"
                             ConvertResult.NOTHING -> "Tidak ada barang baru untuk dicatat"

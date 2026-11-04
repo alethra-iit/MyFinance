@@ -34,6 +34,7 @@ private fun scheduleText(r: RecurringEntity) =
 fun RecurringScreen(vm: AppViewModel, nav: NavController, cur: String) {
     val list by vm.recurring.collectAsState()
     val cats by vm.categories.collectAsState()
+    val wallets by vm.wallets.collectAsState()
     var editing by remember { mutableStateOf<RecurringEntity?>(null) }
 
     Scaffold(
@@ -43,7 +44,7 @@ fun RecurringScreen(vm: AppViewModel, nav: NavController, cur: String) {
             ExtendedFloatingActionButton(
                 onClick = {
                     val today = Dates.today()
-                    editing = RecurringEntity(type = TYPE_EXPENSE, amount = 0, category = "", nextDue = today, anchorDay = Dates.dayOfMonthOf(today))
+                    editing = RecurringEntity(type = TYPE_EXPENSE, amount = 0, category = "", nextDue = today, anchorDay = Dates.dayOfMonthOf(today), walletId = wallets.firstOrNull()?.id ?: 1L)
                 },
                 icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Tambah") }
             )
@@ -95,7 +96,7 @@ fun RecurringScreen(vm: AppViewModel, nav: NavController, cur: String) {
 
     editing?.let { init ->
         RecurringEditor(
-            init, cats, cur, onDismiss = { editing = null },
+            init, cats, wallets, cur, onDismiss = { editing = null },
             onDelete = { vm.deleteRecurring(init.id); editing = null },
             onSave = { r -> vm.saveRecurring(r) { editing = null } }
         )
@@ -104,7 +105,7 @@ fun RecurringScreen(vm: AppViewModel, nav: NavController, cur: String) {
 
 @Composable
 private fun RecurringEditor(
-    initial: RecurringEntity, cats: List<CategoryEntity>, cur: String,
+    initial: RecurringEntity, cats: List<CategoryEntity>, wallets: List<WalletEntity>, cur: String,
     onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (RecurringEntity) -> Unit
 ) {
     val ctx = LocalContext.current
@@ -115,6 +116,8 @@ private fun RecurringEditor(
     var freq by remember { mutableStateOf(initial.frequency) }
     var date by remember { mutableStateOf(initial.nextDue) }
     var note by remember { mutableStateOf(initial.note) }
+    var walletId by remember { mutableStateOf(initial.walletId) }
+    val selectedWallet = effectiveWalletId(wallets, walletId)
 
     val typeCats = cats.filter { it.type == type }.sortedBy { it.sortOrder }
     LaunchedEffect(type, typeCats.size) {
@@ -140,6 +143,10 @@ private fun RecurringEditor(
                 Text("Kategori", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     typeCats.forEach { c -> FilterChip(category == c.name, { category = c.name }, label = { Text(c.name) }) }
+                }
+                if (wallets.size > 1) {
+                    Text("Dompet", style = MaterialTheme.typography.labelLarge)
+                    WalletPicker(wallets, selectedWallet, { walletId = it })
                 }
                 Text("Pengulangan", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -177,7 +184,7 @@ private fun RecurringEditor(
                         onSave(
                             initial.copy(
                                 type = type, amount = v, category = category, note = note.trim(), frequency = freq,
-                                anchorDay = Dates.dayOfMonthOf(day), nextDue = day
+                                anchorDay = Dates.dayOfMonthOf(day), nextDue = day, walletId = selectedWallet
                             )
                         )
                     }

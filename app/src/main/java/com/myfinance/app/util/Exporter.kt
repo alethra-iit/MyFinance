@@ -33,19 +33,29 @@ object Exporter {
      * sheet kedua "Lampiran Struk" berisi Base64-nya (dipotong per kolom). Gabungkan semua bagian lalu decode
      * Base64 untuk mendapatkan kembali berkas JPEG.
      */
-    fun xlsx(title: String, txs: List<TransactionEntity>, receipts: Map<Long, String> = emptyMap(), cur: String = "IDR"): ByteArray {
+    fun xlsx(
+        title: String, txs: List<TransactionEntity>, receipts: Map<Long, String> = emptyMap(), cur: String = "IDR",
+        walletNames: Map<Long, String> = emptyMap()
+    ): ByteArray {
         val rows = mutableListOf<List<Any>>()
         rows += listOf<Any>(title)
         val withReceipts = receipts.isNotEmpty()
-        rows += if (withReceipts) listOf<Any>("No", "Tanggal", "Jenis", "Kategori", "Keterangan", "Nominal (${Fmt.symbol(cur)})", "Struk")
-        else listOf<Any>("No", "Tanggal", "Jenis", "Kategori", "Keterangan", "Nominal (${Fmt.symbol(cur)})")
+        // Kolom Dompet hanya ditambahkan (paling kanan) bila pengguna punya lebih dari satu dompet
+        val withWallet = walletNames.size > 1
+        val header = mutableListOf<Any>("No", "Tanggal", "Jenis", "Kategori", "Keterangan", "Nominal (${Fmt.symbol(cur)})")
+        if (withReceipts) header += "Struk"
+        if (withWallet) header += "Dompet"
+        rows += header
         txs.forEachIndexed { i, t ->
             val base = listOf<Any>(
                 (i + 1).toLong(), Fmt.date(t.dateMillis),
                 if (t.type == TYPE_INCOME) "Pemasukan" else "Pengeluaran",
                 t.category, t.note, if (t.type == TYPE_INCOME) t.amount else -t.amount
             )
-            rows += if (withReceipts) base + (if (receipts.containsKey(t.id)) "Ada (sheet Lampiran Struk)" else "-") else base
+            val row = base.toMutableList()
+            if (withReceipts) row += (if (receipts.containsKey(t.id)) "Ada (sheet Lampiran Struk)" else "-")
+            if (withWallet) row += (walletNames[t.walletId] ?: "-")
+            rows += row
         }
         val inc = txs.filter { it.type == TYPE_INCOME }.sumOf { it.amount }
         val exp = txs.filter { it.type != TYPE_INCOME }.sumOf { it.amount }
@@ -103,7 +113,8 @@ object Exporter {
         return bos.toByteArray()
     }
 
-    fun pdf(title: String, txs: List<TransactionEntity>, cur: String): ByteArray {
+    fun pdf(title: String, txs: List<TransactionEntity>, cur: String, walletNames: Map<Long, String> = emptyMap()): ByteArray {
+        val withWallet = walletNames.size > 1
         val doc = PdfDocument()
         val paint = Paint().apply { isAntiAlias = true; textSize = 10f }
         val bold = Paint(paint).apply { isFakeBoldText = true }
@@ -122,6 +133,7 @@ object Exporter {
         fun header() {
             canvas.drawText("Tanggal", 40f, y, bold); canvas.drawText("Jenis", 120f, y, bold)
             canvas.drawText("Kategori", 195f, y, bold); canvas.drawText("Keterangan", 280f, y, bold)
+            if (withWallet) canvas.drawText("Dompet", 400f, y, bold)
             bold.textAlign = Paint.Align.RIGHT; canvas.drawText("Nominal", 555f, y, bold); bold.textAlign = Paint.Align.LEFT
             y += 6f; canvas.drawLine(40f, y, 555f, y, paint); y += 14f
         }
@@ -140,7 +152,8 @@ object Exporter {
             canvas.drawText(Fmt.date(t.dateMillis), 40f, y, paint)
             canvas.drawText(if (income) "Pemasukan" else "Pengeluaran", 120f, y, paint)
             canvas.drawText(t.category.take(14), 195f, y, paint)
-            canvas.drawText(t.note.take(26), 280f, y, paint)
+            canvas.drawText(t.note.take(if (withWallet) 20 else 26), 280f, y, paint)
+            if (withWallet) canvas.drawText((walletNames[t.walletId] ?: "-").take(11), 400f, y, paint)
             paint.textAlign = Paint.Align.RIGHT
             canvas.drawText(Fmt.signed(t.amount, income, cur), 555f, y, paint)
             paint.textAlign = Paint.Align.LEFT

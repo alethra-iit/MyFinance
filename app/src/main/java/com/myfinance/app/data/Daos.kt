@@ -38,6 +38,9 @@ interface TransactionDao {
 
     @Query("SELECT COUNT(*) FROM transactions WHERE category = :name AND type = :type")
     suspend fun countByCategory(name: String, type: String): Int
+
+    @Query("UPDATE transactions SET walletId = :newId WHERE walletId = :oldId")
+    suspend fun moveWallet(oldId: Long, newId: Long)
 }
 
 @Dao
@@ -194,6 +197,9 @@ interface RecurringDao {
 
     @Query("SELECT COUNT(*) FROM recurring WHERE category = :name AND type = :type")
     suspend fun countByCategory(name: String, type: String): Int
+
+    @Query("UPDATE recurring SET walletId = :newId WHERE walletId = :oldId")
+    suspend fun moveWallet(oldId: Long, newId: Long)
 }
 
 @Dao
@@ -249,4 +255,71 @@ interface ReceiptDao {
 
     @Query("DELETE FROM receipts")
     suspend fun clear()
+}
+
+@Dao
+interface WalletDao {
+    @Query("SELECT * FROM wallets ORDER BY sortOrder, id")
+    fun observeAll(): Flow<List<WalletEntity>>
+
+    @Query("SELECT * FROM wallets ORDER BY sortOrder, id")
+    suspend fun all(): List<WalletEntity>
+
+    @Query("SELECT * FROM wallets WHERE id = :id")
+    suspend fun get(id: Long): WalletEntity?
+
+    @Query("SELECT COUNT(*) FROM wallets")
+    suspend fun count(): Int
+
+    @Insert
+    suspend fun insert(w: WalletEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<WalletEntity>)
+
+    @Update
+    suspend fun update(w: WalletEntity)
+
+    @Query("DELETE FROM wallets WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM wallets")
+    suspend fun clear()
+
+    @Query("UPDATE wallets SET initialBalance = 0")
+    suspend fun resetBalances()
+}
+
+@Dao
+interface TransferDao {
+    @Query("SELECT * FROM transfers ORDER BY dateMillis DESC, id DESC")
+    fun observeAll(): Flow<List<TransferEntity>>
+
+    @Query("SELECT * FROM transfers")
+    suspend fun all(): List<TransferEntity>
+
+    @Insert
+    suspend fun insert(t: TransferEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(list: List<TransferEntity>)
+
+    @Update
+    suspend fun update(t: TransferEntity)
+
+    @Query("DELETE FROM transfers WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM transfers")
+    suspend fun clear()
+
+    @Query("UPDATE transfers SET fromWalletId = :newId WHERE fromWalletId = :oldId")
+    suspend fun moveFrom(oldId: Long, newId: Long)
+
+    @Query("UPDATE transfers SET toWalletId = :newId WHERE toWalletId = :oldId")
+    suspend fun moveTo(oldId: Long, newId: Long)
+
+    /** Transfer yang asal dan tujuannya jadi sama (setelah dua dompet digabung) tidak berarti apa-apa. */
+    @Query("DELETE FROM transfers WHERE fromWalletId = toWalletId")
+    suspend fun deleteSelfTransfers()
 }

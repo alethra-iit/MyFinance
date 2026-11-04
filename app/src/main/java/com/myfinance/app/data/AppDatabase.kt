@@ -17,9 +17,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         BudgetEntity::class,
         RecurringEntity::class,
         DebtEntity::class,
-        ReceiptEntity::class
+        ReceiptEntity::class,
+        WalletEntity::class,
+        TransferEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +33,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recurringDao(): RecurringDao
     abstract fun debtDao(): DebtDao
     abstract fun receiptDao(): ReceiptDao
+    abstract fun walletDao(): WalletDao
+    abstract fun transferDao(): TransferDao
 
     companion object {
         /** v1 -> v2: tambah tabel anggaran & transaksi berulang. Data lama tidak disentuh. */
@@ -75,9 +79,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v5 -> v6: banyak dompet + transfer. Semua transaksi & aturan berulang yang sudah ada dimasukkan ke satu
+         * dompet bernama "Dompet Utama" (id 1) dengan saldo awal 0, jadi saldo total pengguna persis sama seperti sebelumnya.
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `wallets` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `kind` TEXT NOT NULL, `initialBalance` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `transfers` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`fromWalletId` INTEGER NOT NULL, `toWalletId` INTEGER NOT NULL, `amount` INTEGER NOT NULL, " +
+                        "`dateMillis` INTEGER NOT NULL, `note` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)"
+                )
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `walletId` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `recurring` ADD COLUMN `walletId` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("INSERT INTO `wallets` (`id`, `name`, `kind`, `initialBalance`, `sortOrder`) VALUES (1, 'Dompet Utama', 'CASH', 0, 0)")
+            }
+        }
+
         fun build(ctx: Context): AppDatabase =
             Room.databaseBuilder(ctx.applicationContext, AppDatabase::class.java, "myfinance.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

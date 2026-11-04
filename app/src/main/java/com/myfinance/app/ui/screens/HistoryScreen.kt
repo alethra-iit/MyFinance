@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.myfinance.app.data.TYPE_EXPENSE
 import com.myfinance.app.data.TYPE_INCOME
+import com.myfinance.app.data.WalletEntity
 import com.myfinance.app.ui.*
 import com.myfinance.app.util.Dates
 import com.myfinance.app.util.Fmt
@@ -35,6 +36,9 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
     val txs by vm.transactions.collectAsState()
     val receiptIds by vm.receiptIds.collectAsState()
     val categories by vm.categories.collectAsState()
+    val wallets by vm.wallets.collectAsState()
+    val multiWallet = wallets.size > 1
+    val walletNames = remember(wallets) { wallets.associate { it.id to it.name } }
     var filter by rememberSaveable { mutableStateOf("ALL") }
     var query by rememberSaveable { mutableStateOf("") }
     var from by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -42,6 +46,10 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
     // Daftar nama kategori terpilih (kosong = semua kategori)
     var selCats by rememberSaveable(stateSaver = listSaver<List<String>, String>(save = { it }, restore = { it })) {
         mutableStateOf<List<String>>(emptyList())
+    }
+    // Id dompet terpilih (kosong = semua dompet)
+    var selWallets by rememberSaveable(stateSaver = listSaver<List<Long>, Long>(save = { it }, restore = { it })) {
+        mutableStateOf<List<Long>>(emptyList())
     }
     var minAmt by rememberSaveable { mutableStateOf("") }
     var maxAmt by rememberSaveable { mutableStateOf("") }
@@ -52,7 +60,7 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
     val minV = minAmt.toLongOrNull()
     val maxV = maxAmt.toLongOrNull()
 
-    val filtered = remember(txs, filter, query, from, to, selCats, minAmt, maxAmt) {
+    val filtered = remember(txs, filter, query, from, to, selCats, selWallets, minAmt, maxAmt) {
         val f = from
         val t = to
         val q = query.trim()
@@ -63,12 +71,14 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
                 (f == null || tx.dateMillis >= f) &&
                 (t == null || tx.dateMillis < t + Dates.DAY) &&
                 (selCats.isEmpty() || tx.category in selCats) &&
+                (selWallets.isEmpty() || tx.walletId in selWallets) &&
                 (minV == null || tx.amount >= minV) &&
                 (maxV == null || tx.amount <= maxV)
         }
     }
 
     val advancedCount = (if (from != null) 1 else 0) + (if (selCats.isNotEmpty()) 1 else 0) +
+        (if (selWallets.isNotEmpty()) 1 else 0) +
         (if (minV != null || maxV != null) 1 else 0)
     val anyFilter = advancedCount > 0 || query.isNotBlank() || filter != "ALL"
     val totals = remember(filtered) {
@@ -76,7 +86,7 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
             filtered.filter { it.type == TYPE_EXPENSE }.sumOf { it.amount }
     }
 
-    fun resetAdvanced() { from = null; to = null; selCats = emptyList(); minAmt = ""; maxAmt = "" }
+    fun resetAdvanced() { from = null; to = null; selCats = emptyList(); selWallets = emptyList(); minAmt = ""; maxAmt = "" }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -134,6 +144,10 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
                     if (selCats.isNotEmpty()) {
                         ActiveChip(if (selCats.size <= 2) selCats.joinToString(", ") else "${selCats.size} kategori", { showFilter = true }) { selCats = emptyList() }
                     }
+                    if (selWallets.isNotEmpty()) {
+                        val label = selWallets.mapNotNull { walletNames[it] }.let { n -> if (n.size <= 2) n.joinToString(", ") else "${n.size} dompet" }
+                        ActiveChip(label, { showFilter = true }) { selWallets = emptyList() }
+                    }
                     if (minV != null || maxV != null) {
                         val label = when {
                             minV != null && maxV != null -> "${Fmt.money(minV, cur)} – ${Fmt.money(maxV, cur)}"
@@ -158,7 +172,7 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
                 EmptyState("Tidak ada transaksi yang cocok.")
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-                    items(filtered, key = { it.id }) { tx -> TransactionRow(tx, cur, hasReceipt = tx.id in receiptIds) { selectedId = tx.id } }
+                    items(filtered, key = { it.id }) { tx -> TransactionRow(tx, cur, hasReceipt = tx.id in receiptIds, walletName = if (multiWallet) walletNames[tx.walletId] else null) { selectedId = tx.id } }
                 }
             }
         }
@@ -169,6 +183,7 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
             .sortedWith(compareBy({ it.type }, { it.sortOrder })).map { it.name }.distinct()
         HistoryFilterSheet(
             cur = cur, categoryNames = names, selected = selCats, onSelected = { selCats = it },
+            wallets = if (multiWallet) wallets else emptyList(), selWallets = selWallets, onWallets = { selWallets = it },
             from = from, to = to, onPickRange = { showRange = true }, onRange = { s, e -> from = s; to = e },
             minAmt = minAmt, maxAmt = maxAmt, onMin = { minAmt = it }, onMax = { maxAmt = it },
             resultCount = filtered.size, onReset = { resetAdvanced() }, onDismiss = { showFilter = false }
@@ -198,6 +213,7 @@ fun HistoryScreen(vm: AppViewModel, nav: NavController, cur: String) {
     if (selected != null) {
         TransactionDetailSheet(
             selected, cur, receipt = receipt,
+            walletName = if (multiWallet) walletNames[selected.walletId] else null,
             onDismiss = { selectedId = null },
             onEdit = { selectedId = null; nav.navigate("add/${selected.type}?id=${selected.id}") },
             onDelete = { vm.deleteTransaction(selected.id); selectedId = null }
@@ -218,6 +234,7 @@ private fun ActiveChip(label: String, onClick: () -> Unit, onClear: () -> Unit) 
 private fun HistoryFilterSheet(
     cur: String,
     categoryNames: List<String>, selected: List<String>, onSelected: (List<String>) -> Unit,
+    wallets: List<WalletEntity>, selWallets: List<Long>, onWallets: (List<Long>) -> Unit,
     from: Long?, to: Long?, onPickRange: () -> Unit, onRange: (Long?, Long?) -> Unit,
     minAmt: String, maxAmt: String, onMin: (String) -> Unit, onMax: (String) -> Unit,
     resultCount: Int, onReset: () -> Unit, onDismiss: () -> Unit
@@ -273,6 +290,25 @@ private fun HistoryFilterSheet(
                 }
                 Text(
                     if (selected.isEmpty()) "Tidak ada yang dipilih = semua kategori" else "${selected.size} kategori dipilih",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // ---- Dompet (hanya bila punya lebih dari satu) ----
+            if (wallets.isNotEmpty()) {
+                Text("Dompet", fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    wallets.forEach { w ->
+                        val on = w.id in selWallets
+                        FilterChip(
+                            selected = on,
+                            onClick = { onWallets(if (on) selWallets - w.id else selWallets + w.id) },
+                            label = { Text(w.name) }
+                        )
+                    }
+                }
+                Text(
+                    if (selWallets.isEmpty()) "Tidak ada yang dipilih = semua dompet" else "${selWallets.size} dompet dipilih",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

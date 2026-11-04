@@ -213,7 +213,7 @@ fun DateField(value: Long, onChange: (Long) -> Unit) {
 }
 
 @Composable
-fun TransactionRow(tx: TransactionEntity, cur: String, hasReceipt: Boolean = false, onClick: () -> Unit) {
+fun TransactionRow(tx: TransactionEntity, cur: String, hasReceipt: Boolean = false, walletName: String? = null, onClick: () -> Unit) {
     val income = tx.type == TYPE_INCOME
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick)
@@ -237,7 +237,7 @@ fun TransactionRow(tx: TransactionEntity, cur: String, hasReceipt: Boolean = fal
                 }
             }
             Text(
-                "${Fmt.date(tx.dateMillis)} • ${if (income) "Pemasukan" else "Pengeluaran"}",
+                "${Fmt.date(tx.dateMillis)} • ${if (income) "Pemasukan" else "Pengeluaran"}" + (if (walletName != null) " • $walletName" else ""),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -269,7 +269,8 @@ fun EmptyState(text: String, modifier: Modifier = Modifier) {
 fun TransactionDetailSheet(
     tx: TransactionEntity, cur: String,
     onDismiss: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit,
-    receipt: String? = null
+    receipt: String? = null,
+    walletName: String? = null
 ) {
     val income = tx.type == TYPE_INCOME
     var viewReceipt by remember { mutableStateOf(false) }
@@ -286,6 +287,7 @@ fun TransactionDetailSheet(
             Spacer(Modifier.height(12.dp))
             DetailRow("Jenis", if (income) "Pemasukan" else "Pengeluaran")
             DetailRow("Kategori", tx.category)
+            if (walletName != null) DetailRow("Dompet", walletName)
             DetailRow("Tanggal", Fmt.date(tx.dateMillis))
             DetailRow("Keterangan", tx.note.ifBlank { "-" })
             if (receipt != null) {

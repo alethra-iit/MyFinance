@@ -12,6 +12,7 @@ import com.myfinance.app.data.*
 import com.myfinance.app.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -27,6 +28,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repo.categories.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val settings: StateFlow<UserSettingsEntity?> =
         repo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val wallets: StateFlow<List<WalletEntity>> =
+        repo.wallets.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val transfers: StateFlow<List<TransferEntity>> =
+        repo.transfers.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** Saldo per dompet (id -> saldo); selalu mengikuti perubahan transaksi, transfer, dan dompet. */
+    val balances: StateFlow<Map<Long, Long>> =
+        combine(wallets, transactions, transfers) { w, t, tr -> walletBalances(w, t, tr) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    fun saveWallet(w: WalletEntity, onDone: () -> Unit = {}) { viewModelScope.launch { repo.saveWallet(w); onDone() } }
+    fun deleteWallet(id: Long, moveTo: Long, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch { onDone(repo.deleteWallet(id, moveTo)) }
+    }
+    fun saveTransfer(t: TransferEntity, onDone: (Boolean) -> Unit = {}) { viewModelScope.launch { onDone(repo.saveTransfer(t)) } }
+    fun deleteTransfer(id: Long) { viewModelScope.launch { repo.deleteTransfer(id) } }
 
     /** Id transaksi yang punya foto struk (untuk ikon penanda di daftar; gambarnya sendiri tidak dimuat). */
     val receiptIds: StateFlow<Set<Long>> =
@@ -78,9 +95,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveDebt(d: DebtEntity, onDone: () -> Unit = {}) { viewModelScope.launch { repo.saveDebt(d); onDone() } }
     fun deleteDebt(id: Long) { viewModelScope.launch { repo.deleteDebt(id) } }
-    fun addPayment(id: Long, amount: Long, recordTx: Boolean, onDone: () -> Unit = {}) {
+    fun addPayment(id: Long, amount: Long, recordTx: Boolean, walletId: Long, onDone: () -> Unit = {}) {
         viewModelScope.launch {
-            repo.addPayment(id, amount, recordTx, Dates.today())
+            repo.addPayment(id, amount, recordTx, Dates.today(), walletId)
             if (recordTx) runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }
             onDone()
         }
@@ -153,8 +170,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> { list = all; title = "Laporan Keuangan - Semua Data" }
         }
         val sorted = list.sortedBy { it.dateMillis }
-        if (format == "PDF") Exporter.pdf(title, sorted, cur)
-        else Exporter.xlsx(title, sorted, repo.receiptsFor(sorted.map { it.id }), cur)
+        val walletNames = wallets.value.associate { it.id to it.name }
+        if (format == "PDF") Exporter.pdf(title, sorted, cur, walletNames)
+        else Exporter.xlsx(title, sorted, repo.receiptsFor(sorted.map { it.id }), cur, walletNames)
     }
 }
 
@@ -179,9 +197,9 @@ class ShoppingViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Selain hasil konversi, mengembalikan peringatan anggaran yang baru tercapai (sama seperti mencatat transaksi biasa). */
-    fun convert(listId: Long, category: String, date: Long, onResult: (ConvertResult, List<String>) -> Unit) {
+    fun convert(listId: Long, category: String, date: Long, walletId: Long, onResult: (ConvertResult, List<String>) -> Unit) {
         viewModelScope.launch {
-            val r = repo.convert(listId, category, date)
+            val r = repo.convert(listId, category, date, walletId)
             val alerts = if (r == ConvertResult.OK) {
                 runCatching { BudgetAlerts.check(getApplication<Application>(), notify = false) }
                     .getOrDefault(emptyList()).map { it.message }

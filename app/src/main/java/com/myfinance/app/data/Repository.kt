@@ -17,7 +17,9 @@ data class AllData(
     val budgets: List<BudgetEntity> = emptyList(),
     val recurring: List<RecurringEntity> = emptyList(),
     val debts: List<DebtEntity> = emptyList(),
-    val receipts: List<ReceiptEntity> = emptyList()
+    val receipts: List<ReceiptEntity> = emptyList(),
+    val wallets: List<WalletEntity> = emptyList(),
+    val transfers: List<TransferEntity> = emptyList()
 )
 
 class Repository(private val db: AppDatabase) {
@@ -29,6 +31,8 @@ class Repository(private val db: AppDatabase) {
     private val rec = db.recurringDao()
     private val debt = db.debtDao()
     private val rcp = db.receiptDao()
+    private val wal = db.walletDao()
+    private val trf = db.transferDao()
 
     val transactions: Flow<List<TransactionEntity>> = tx.observeAll()
     val categories: Flow<List<CategoryEntity>> = cat.observeAll()
@@ -39,10 +43,13 @@ class Repository(private val db: AppDatabase) {
     val recurring: Flow<List<RecurringEntity>> = rec.observeAll()
     val debts: Flow<List<DebtEntity>> = debt.observeAll()
     val receiptIds: Flow<List<Long>> = rcp.observeIds()
+    val wallets: Flow<List<WalletEntity>> = wal.observeAll()
+    val transfers: Flow<List<TransferEntity>> = trf.observeAll()
 
     suspend fun seed() {
         if (cat.count() == 0) cat.insertAll(DefaultCategories.all())
         if (set.get() == null) set.upsert(UserSettingsEntity())
+        if (wal.count() == 0) wal.insertAll(DefaultWallets.all())
     }
 
     // ---------- Transaksi ----------
@@ -53,7 +60,8 @@ class Repository(private val db: AppDatabase) {
      */
     suspend fun saveTransaction(t: TransactionEntity, receipt: String? = null, updateReceipt: Boolean = false) {
         db.withTransaction {
-            val id = if (t.id == 0L) tx.insert(t) else { tx.update(t); t.id }
+            val fixed = t.copy(walletId = validWalletId(t.walletId))
+            val id = if (fixed.id == 0L) tx.insert(fixed) else { tx.update(fixed); fixed.id }
             if (updateReceipt) {
                 if (receipt.isNullOrEmpty()) rcp.delete(id) else rcp.upsert(ReceiptEntity(id, receipt))
             }
@@ -66,6 +74,54 @@ class Repository(private val db: AppDatabase) {
     suspend fun receiptsFor(ids: List<Long>): Map<Long, String> =
         ids.chunked(500).flatMap { rcp.forIds(it) }.associate { it.transactionId to it.data }
     suspend fun getTransaction(id: Long) = tx.get(id)
+
+    // ---------- Dompet & transfer ----------
+    /** Dompet yang diminta bila ada; kalau tidak (mis. sudah dihapus) jatuh ke dompet pertama. */
+    private suspend fun validWalletId(id: Long): Long =
+        if (wal.get(id) != null) id else (wal.all().firstOrNull()?.id ?: id)
+
+    /** Tambah (id = 0) atau ubah dompet. */
+    suspend fun saveWallet(w: WalletEntity) {
+        db.withTransaction {
+            if (w.id == 0L) {
+                val order = (wal.all().maxOfOrNull { it.sortOrder } ?: -1) + 1
+                wal.insert(w.copy(sortOrder = order))
+            } else {
+                val old = wal.get(w.id)
+                if (old != null) wal.update(w.copy(sortOrder = old.sortOrder))
+            }
+            Unit
+        }
+    }
+
+    /**
+     * Menghapus dompet. Seluruh transaksi, transaksi berulang, dan transfer miliknya dipindah ke [moveTo];
+     * saldo awalnya digabung ke dompet tujuan sehingga total uang tidak berubah. Transfer antara kedua dompet
+     * itu dihapus (setelah digabung tidak ada lagi yang berpindah). Dompet terakhir tidak boleh dihapus.
+     */
+    suspend fun deleteWallet(id: Long, moveTo: Long): Boolean = db.withTransaction {
+        val w = wal.get(id) ?: return@withTransaction false
+        val target = wal.get(moveTo) ?: return@withTransaction false
+        if (id == moveTo || wal.count() <= 1) return@withTransaction false
+        tx.moveWallet(id, moveTo)
+        rec.moveWallet(id, moveTo)
+        trf.moveFrom(id, moveTo)
+        trf.moveTo(id, moveTo)
+        trf.deleteSelfTransfers()
+        wal.update(target.copy(initialBalance = target.initialBalance + w.initialBalance))
+        wal.delete(id)
+        true
+    }
+
+    /** Menyimpan transfer baru (id = 0) atau perubahan. false bila tidak valid (dompet sama / nominal 0 / dompet hilang). */
+    suspend fun saveTransfer(t: TransferEntity): Boolean = db.withTransaction {
+        if (t.amount <= 0L || t.fromWalletId == t.toWalletId) return@withTransaction false
+        if (wal.get(t.fromWalletId) == null || wal.get(t.toWalletId) == null) return@withTransaction false
+        if (t.id == 0L) trf.insert(t) else trf.update(t)
+        true
+    }
+
+    suspend fun deleteTransfer(id: Long) = trf.delete(id)
 
     // ---------- Kategori ----------
     /** Tambah (id = 0) atau ubah. Mengganti nama ikut memperbarui transaksi, anggaran, dan transaksi berulang. */
@@ -145,15 +201,19 @@ class Repository(private val db: AppDatabase) {
      */
     suspend fun processRecurring(now: Long = System.currentTimeMillis()): Int = db.withTransaction {
         val endOfToday = Dates.range(Period.DAY, now).second
+        val walletIds = wal.all().map { it.id }
+        val fallbackWallet = walletIds.firstOrNull() ?: 1L
         var created = 0
         for (r in rec.due(endOfToday)) {
+            val target = if (r.walletId in walletIds) r.walletId else fallbackWallet
             var due = r.nextDue
             var n = 0
             while (due < endOfToday && n < 500) {
                 tx.insert(
                     TransactionEntity(
                         type = r.type, amount = r.amount, category = r.category, dateMillis = due,
-                        note = (r.note.ifBlank { r.category }) + " (berulang)"
+                        note = (r.note.ifBlank { r.category }) + " (berulang)",
+                        walletId = target
                     )
                 )
                 due = Dates.nextOccurrence(r.frequency, due, r.anchorDay)
@@ -174,7 +234,7 @@ class Repository(private val db: AppDatabase) {
      * Mencatat pembayaran (cicilan atau pelunasan). Jumlah dibatasi sebesar sisa. Bila recordTx, dibuat juga
      * transaksi (pemasukan untuk piutang, pengeluaran untuk utang) dalam transaksi database yang sama.
      */
-    suspend fun addPayment(id: Long, amount: Long, recordTx: Boolean, dateMillis: Long) = db.withTransaction {
+    suspend fun addPayment(id: Long, amount: Long, recordTx: Boolean, dateMillis: Long, walletId: Long) = db.withTransaction {
         val d = debt.get(id) ?: return@withTransaction
         val pay = minOf(amount, (d.amount - d.paid).coerceAtLeast(0L))
         if (pay <= 0L) return@withTransaction
@@ -184,7 +244,8 @@ class Repository(private val db: AppDatabase) {
             tx.insert(
                 TransactionEntity(
                     type = if (lent) TYPE_INCOME else TYPE_EXPENSE, amount = pay, category = "Lainnya", dateMillis = dateMillis,
-                    note = if (lent) "Pembayaran dari ${d.person}" else "Bayar utang ke ${d.person}"
+                    note = if (lent) "Pembayaran dari ${d.person}" else "Bayar utang ke ${d.person}",
+                    walletId = validWalletId(walletId)
                 )
             )
         }
@@ -221,7 +282,7 @@ class Repository(private val db: AppDatabase) {
      * Konversi barang yang sudah dicentang (dan belum pernah dikonversi) menjadi SATU transaksi pengeluaran.
      * Semua dilakukan dalam satu transaksi database; barang ditandai converted sehingga tidak bisa terduplikasi.
      */
-    suspend fun convert(listId: Long, category: String, dateMillis: Long): ConvertResult =
+    suspend fun convert(listId: Long, category: String, dateMillis: Long, walletId: Long): ConvertResult =
         db.withTransaction {
             val list = shop.getList(listId) ?: return@withTransaction ConvertResult.NOTHING
             val toConvert = shop.getItems(listId).filter { it.checked && !it.converted }
@@ -234,7 +295,8 @@ class Repository(private val db: AppDatabase) {
                     amount = total,
                     category = category,
                     dateMillis = dateMillis,
-                    note = "Belanja: ${list.title}"
+                    note = "Belanja: ${list.title}",
+                    walletId = validWalletId(walletId)
                 )
             )
             shop.markConverted(toConvert.map { it.id })
@@ -243,24 +305,30 @@ class Repository(private val db: AppDatabase) {
         }
 
     // ---------- Backup / restore ----------
-    suspend fun allData() = AllData(tx.all(), cat.all(), shop.allLists(), shop.allItems(), set.get(), bud.all(), rec.all(), debt.all(), rcp.all())
+    suspend fun allData() = AllData(tx.all(), cat.all(), shop.allLists(), shop.allItems(), set.get(), bud.all(), rec.all(), debt.all(), rcp.all(), wal.all(), trf.all())
 
     suspend fun restore(d: AllData) = db.withTransaction {
-        shop.clearItems(); shop.clearLists(); rcp.clear(); tx.clear(); cat.clear(); bud.clear(); rec.clear(); debt.clear()
+        shop.clearItems(); shop.clearLists(); rcp.clear(); trf.clear(); tx.clear(); wal.clear(); cat.clear(); bud.clear(); rec.clear(); debt.clear()
         if (d.categories.isNotEmpty()) cat.insertAll(d.categories) else cat.insertAll(DefaultCategories.all())
-        tx.insertAll(d.transactions)
+        // Backup lama (sebelum fitur dompet) tidak punya dompet: semua transaksinya masuk ke satu "Dompet Utama"
+        val restoredWallets = if (d.wallets.isNotEmpty()) d.wallets else listOf(DefaultWallets.legacy())
+        wal.insertAll(restoredWallets)
+        val walletIds = restoredWallets.map { it.id }.toSet()
+        val fallbackWallet = restoredWallets.first().id
+        tx.insertAll(d.transactions.map { if (it.walletId in walletIds) it else it.copy(walletId = fallbackWallet) })
         // Hanya struk yang transaksinya ada (kalau tidak, batasan foreign key menolak seluruh restore)
         val txIds = d.transactions.map { it.id }.toSet()
         rcp.insertAll(d.receipts.filter { it.transactionId in txIds })
         shop.insertLists(d.lists)
         shop.insertItems(d.items)
         bud.insertAll(d.budgets)
-        rec.insertAll(d.recurring)
+        rec.insertAll(d.recurring.map { if (it.walletId in walletIds) it else it.copy(walletId = fallbackWallet) })
+        trf.insertAll(d.transfers.filter { it.fromWalletId in walletIds && it.toWalletId in walletIds && it.fromWalletId != it.toWalletId })
         debt.insertAll(d.debts)
         d.settings?.let { set.upsert(it) }
     }
 
     suspend fun clearAll() = db.withTransaction {
-        shop.clearItems(); shop.clearLists(); rcp.clear(); tx.clear()
+        shop.clearItems(); shop.clearLists(); rcp.clear(); trf.clear(); tx.clear(); wal.resetBalances()
     }
 }

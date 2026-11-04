@@ -151,6 +151,7 @@ fun ProfileScreen(vm: AppViewModel, settings: UserSettingsEntity, upd: UpdateCon
         }
 
         SoftCard(Modifier.fillMaxWidth()) {
+            SettingRow(Icons.Rounded.AccountBalanceWallet, "Dompet & Transfer", "Tunai, rekening bank, e-wallet, dan pindah saldo") { nav.navigate("wallets") }
             SettingRow(Icons.Rounded.Category, "Kelola Kategori", "Tambah, ubah, hapus; pilih ikon dan warna") { nav.navigate("categories") }
             SettingRow(Icons.Rounded.Savings, "Anggaran Bulanan", "Batas pengeluaran per kategori + peringatan") { nav.navigate("budget") }
             SettingRow(Icons.Rounded.SwapHoriz, "Utang & Piutang", "Catat pinjaman, jatuh tempo, dan pengingat") { nav.navigate("debts") }

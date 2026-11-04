@@ -37,6 +37,7 @@ import com.myfinance.app.util.*
 fun DebtScreen(vm: AppViewModel, nav: NavController, cur: String) {
     val ctx = LocalContext.current
     val debts by vm.debts.collectAsState()
+    val wallets by vm.wallets.collectAsState()
     var filter by rememberSaveable { mutableStateOf("ACTIVE") }
     var editing by remember { mutableStateOf<DebtEntity?>(null) }
     var paying by remember { mutableStateOf<DebtEntity?>(null) }
@@ -120,8 +121,8 @@ fun DebtScreen(vm: AppViewModel, nav: NavController, cur: String) {
         )
     }
     paying?.let { d ->
-        PaymentDialog(d, cur, onDismiss = { paying = null }) { amount, record ->
-            vm.addPayment(d.id, amount, record) { paying = null }
+        PaymentDialog(d, cur, wallets, onDismiss = { paying = null }) { amount, record, walletId ->
+            vm.addPayment(d.id, amount, record, walletId) { paying = null }
         }
     }
 }
@@ -168,11 +169,15 @@ private fun DebtRow(d: DebtEntity, cur: String, now: Long, onClick: () -> Unit, 
 }
 
 @Composable
-private fun PaymentDialog(d: DebtEntity, cur: String, onDismiss: () -> Unit, onConfirm: (Long, Boolean) -> Unit) {
+private fun PaymentDialog(
+    d: DebtEntity, cur: String, wallets: List<WalletEntity>, onDismiss: () -> Unit, onConfirm: (Long, Boolean, Long) -> Unit
+) {
     val ctx = LocalContext.current
     val lent = d.type == DEBT_LENT
     var text by remember { mutableStateOf(d.remaining.toString()) }
     var record by remember { mutableStateOf(false) }
+    var walletId by remember { mutableStateOf(-1L) }
+    val selectedWallet = effectiveWalletId(wallets, walletId)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (lent) "Terima dari ${d.person}" else "Bayar utang ke ${d.person}") },
@@ -194,13 +199,18 @@ private fun PaymentDialog(d: DebtEntity, cur: String, onDismiss: () -> Unit, onC
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+                // Dompet mana yang uangnya bertambah/berkurang (hanya relevan bila dicatat sebagai transaksi)
+                if (record && wallets.size > 1) {
+                    Text(if (lent) "Uang masuk ke dompet" else "Dibayar dari dompet", style = MaterialTheme.typography.labelLarge)
+                    WalletPicker(wallets, selectedWallet, { walletId = it })
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val v = text.toLongOrNull() ?: 0L
                 if (v <= 0L) Toast.makeText(ctx, "Nominal harus lebih dari 0", Toast.LENGTH_SHORT).show()
-                else onConfirm(minOf(v, d.remaining), record)
+                else onConfirm(minOf(v, d.remaining), record, selectedWallet)
             }) { Text("Simpan") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }

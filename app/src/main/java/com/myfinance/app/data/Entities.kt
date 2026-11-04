@@ -16,6 +16,41 @@ data class TransactionEntity(
     val category: String,
     val dateMillis: Long,
     val note: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Dompet tempat uang ini masuk/keluar (lihat [WalletEntity]). */
+    val walletId: Long = 1L
+)
+
+const val WALLET_CASH = "CASH"
+const val WALLET_BANK = "BANK"
+const val WALLET_EWALLET = "EWALLET"
+const val WALLET_OTHER = "OTHER"
+
+/**
+ * Dompet / akun (Tunai, Rekening Bank, E-Wallet, ...). Saldo TIDAK disimpan, melainkan dihitung:
+ * saldo awal + pemasukan - pengeluaran + transfer masuk - transfer keluar (lihat walletBalances).
+ */
+@Entity(tableName = "wallets")
+data class WalletEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val kind: String = WALLET_CASH,
+    val initialBalance: Long = 0L,
+    val sortOrder: Int = 0
+)
+
+/**
+ * Perpindahan uang antar dompet. Sengaja dipisah dari tabel transactions supaya tidak dihitung
+ * sebagai pemasukan/pengeluaran di laporan, anggaran, dan ringkasan bulanan.
+ */
+@Entity(tableName = "transfers")
+data class TransferEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val fromWalletId: Long,
+    val toWalletId: Long,
+    val amount: Long,
+    val dateMillis: Long,
+    val note: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -111,7 +146,9 @@ data class RecurringEntity(
     val anchorDay: Int = 1,
     /** Awal hari (millis) kemunculan berikutnya yang belum dicatat. */
     val nextDue: Long,
-    val active: Boolean = true
+    val active: Boolean = true,
+    /** Dompet tujuan transaksi yang dibuat otomatis. */
+    val walletId: Long = 1L
 )
 
 const val DEBT_LENT = "LENT"          // piutang: saya meminjamkan, orang lain berutang ke saya
@@ -130,6 +167,18 @@ data class DebtEntity(
     val note: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
+
+object DefaultWallets {
+    /** Dompet awal pada pemasangan baru. */
+    fun all(): List<WalletEntity> = listOf(
+        WalletEntity(name = "Tunai", kind = WALLET_CASH, sortOrder = 0),
+        WalletEntity(name = "Rekening Bank", kind = WALLET_BANK, sortOrder = 1),
+        WalletEntity(name = "E-Wallet", kind = WALLET_EWALLET, sortOrder = 2)
+    )
+
+    /** Dompet tunggal untuk data lama (migrasi / backup lama): menampung semua transaksi yang sudah ada. */
+    fun legacy(): WalletEntity = WalletEntity(id = 1L, name = "Dompet Utama", kind = WALLET_CASH, sortOrder = 0)
+}
 
 object DefaultCategories {
     val income = listOf("Gaji", "Bonus", "Hadiah", "Bisnis", "Investasi", "Lainnya")

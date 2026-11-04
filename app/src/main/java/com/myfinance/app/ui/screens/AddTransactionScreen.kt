@@ -41,11 +41,14 @@ import com.myfinance.app.util.Fmt
 fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: String, editId: Long, cur: String) {
     val ctx = LocalContext.current
     val cats by vm.categories.collectAsState()
+    val wallets by vm.wallets.collectAsState()
     var type by rememberSaveable { mutableStateOf(initialType) }
     var amount by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf("") }
     var date by rememberSaveable { mutableStateOf(Dates.today()) }
     var note by rememberSaveable { mutableStateOf("") }
+    // -1 = belum dipilih: dompet pertama dipakai (lihat effectiveWalletId)
+    var walletId by rememberSaveable { mutableStateOf(-1L) }
     var loaded by remember { mutableStateOf(editId < 0) }
     val editing = editId >= 0
     // Draf struk hidup di ViewModel; flag ini mencegah draf direset saat layar diputar (rememberSaveable ikut pulih)
@@ -59,12 +62,13 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
         if (editId >= 0) {
             vm.getTransaction(editId)?.let {
                 type = it.type; amount = it.amount.toString(); category = it.category
-                date = it.dateMillis; note = it.note
+                date = it.dateMillis; note = it.note; walletId = it.walletId
             }
             loaded = true
         }
     }
 
+    val selectedWallet = effectiveWalletId(wallets, walletId)
     val typeCats = cats.filter { it.type == type }.sortedBy { it.sortOrder }
     LaunchedEffect(type, typeCats.size, loaded) {
         if (loaded && typeCats.isNotEmpty() && typeCats.none { it.name == category }) category = typeCats.first().name
@@ -97,6 +101,11 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = RoundedCornerShape(16.dp), colors = fieldColors()
             )
+            // Dompet (hanya bila punya lebih dari satu)
+            if (wallets.size > 1) {
+                Text("Dompet", fontWeight = FontWeight.SemiBold)
+                WalletPicker(wallets, selectedWallet, { walletId = it })
+            }
             // Kategori
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Kategori", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -163,7 +172,8 @@ fun AddTransactionScreen(vm: AppViewModel, nav: NavController, initialType: Stri
                         else -> vm.saveTransaction(
                             TransactionEntity(
                                 id = if (editing) editId else 0L, type = type, amount = value,
-                                category = category, dateMillis = date, note = note.trim()
+                                category = category, dateMillis = date, note = note.trim(),
+                                walletId = selectedWallet
                             ),
                             onAlert = { msg -> Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show() }
                         ) {

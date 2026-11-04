@@ -99,6 +99,10 @@ fun AppNav(vm: AppViewModel, settings: UserSettingsEntity, lock: AppLock) {
             composable("recurring") { RecurringScreen(vm, nav, cur) }
             composable("report") { ReportScreen(vm, nav, cur) }
             composable(
+                "wallets?transfer={transfer}",
+                arguments = listOf(navArgument("transfer") { type = NavType.BoolType; defaultValue = false })
+            ) { be -> WalletScreen(vm, nav, cur, be.arguments?.getBoolean("transfer") ?: false) }
+            composable(
                 "add/{type}?id={id}",
                 arguments = listOf(
                     navArgument("type") { type = NavType.StringType; defaultValue = "EXPENSE" },

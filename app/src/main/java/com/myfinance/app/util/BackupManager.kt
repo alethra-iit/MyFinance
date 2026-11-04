@@ -8,12 +8,12 @@ object BackupManager {
     fun toJson(d: AllData): String {
         val root = JSONObject()
         root.put("app", "MyFinance")
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("transactions", JSONArray().also { a ->
             d.transactions.forEach {
                 a.put(JSONObject().put("id", it.id).put("type", it.type).put("amount", it.amount)
                     .put("category", it.category).put("dateMillis", it.dateMillis)
-                    .put("note", it.note).put("createdAt", it.createdAt))
+                    .put("note", it.note).put("createdAt", it.createdAt).put("walletId", it.walletId))
             }
         })
         root.put("categories", JSONArray().also { a ->
@@ -42,7 +42,8 @@ object BackupManager {
             d.recurring.forEach {
                 a.put(JSONObject().put("id", it.id).put("type", it.type).put("amount", it.amount)
                     .put("category", it.category).put("note", it.note).put("frequency", it.frequency)
-                    .put("anchorDay", it.anchorDay).put("nextDue", it.nextDue).put("active", it.active))
+                    .put("anchorDay", it.anchorDay).put("nextDue", it.nextDue).put("active", it.active)
+                    .put("walletId", it.walletId))
             }
         })
         root.put("debts", JSONArray().also { a ->
@@ -54,6 +55,18 @@ object BackupManager {
         })
         root.put("receipts", JSONArray().also { a ->
             d.receipts.forEach { a.put(JSONObject().put("transactionId", it.transactionId).put("data", it.data)) }
+        })
+        root.put("wallets", JSONArray().also { a ->
+            d.wallets.forEach {
+                a.put(JSONObject().put("id", it.id).put("name", it.name).put("kind", it.kind)
+                    .put("initialBalance", it.initialBalance).put("sortOrder", it.sortOrder))
+            }
+        })
+        root.put("transfers", JSONArray().also { a ->
+            d.transfers.forEach {
+                a.put(JSONObject().put("id", it.id).put("fromWalletId", it.fromWalletId).put("toWalletId", it.toWalletId)
+                    .put("amount", it.amount).put("dateMillis", it.dateMillis).put("note", it.note).put("createdAt", it.createdAt))
+            }
         })
         d.settings?.let {
             root.put("settings", JSONObject().put("userName", it.userName).put("theme", it.theme)
@@ -69,7 +82,8 @@ object BackupManager {
         return AllData(
             transactions = r.getJSONArray("transactions").map {
                 TransactionEntity(it.getLong("id"), it.getString("type"), it.getLong("amount"),
-                    it.getString("category"), it.getLong("dateMillis"), it.optString("note", ""), it.optLong("createdAt"))
+                    it.getString("category"), it.getLong("dateMillis"), it.optString("note", ""), it.optLong("createdAt"),
+                    it.optLong("walletId", 1L))
             },
             categories = r.optJSONArray("categories")?.map {
                 CategoryEntity(it.getLong("id"), it.getString("name"), it.getString("type"), it.getInt("sortOrder"),
@@ -91,7 +105,7 @@ object BackupManager {
             recurring = r.optJSONArray("recurring")?.map {
                 RecurringEntity(it.getLong("id"), it.getString("type"), it.getLong("amount"), it.getString("category"),
                     it.optString("note", ""), it.optString("frequency", FREQ_MONTHLY), it.optInt("anchorDay", 1),
-                    it.getLong("nextDue"), it.optBoolean("active", true))
+                    it.getLong("nextDue"), it.optBoolean("active", true), it.optLong("walletId", 1L))
             } ?: emptyList(),
             debts = r.optJSONArray("debts")?.map {
                 DebtEntity(it.getLong("id"), it.getString("person"), it.getString("type"), it.getLong("amount"),
@@ -100,6 +114,14 @@ object BackupManager {
             } ?: emptyList(),
             receipts = r.optJSONArray("receipts")?.map {
                 ReceiptEntity(it.getLong("transactionId"), it.getString("data"))
+            } ?: emptyList(),
+            wallets = r.optJSONArray("wallets")?.map {
+                WalletEntity(it.getLong("id"), it.getString("name"), it.optString("kind", WALLET_OTHER),
+                    it.optLong("initialBalance", 0L), it.optInt("sortOrder", 0))
+            } ?: emptyList(),
+            transfers = r.optJSONArray("transfers")?.map {
+                TransferEntity(it.getLong("id"), it.getLong("fromWalletId"), it.getLong("toWalletId"), it.getLong("amount"),
+                    it.getLong("dateMillis"), it.optString("note", ""), it.optLong("createdAt", System.currentTimeMillis()))
             } ?: emptyList()
         )
     }
